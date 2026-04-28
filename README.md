@@ -22,6 +22,7 @@ Meta広告APIとSATTOU予約APIのデータを紐付けて一元管理するた�
 
 ```bash
 npm install
+cp .env.example .env.local   # GAS連携を使う場合（後述）
 npm run dev
 ```
 
@@ -51,4 +52,70 @@ src/
 
 - Meta Marketing API: `act_xxx` の `insights` を日別取得 → `daily.spend / impressions / clicks` に充当
 - SATTOU API: 各店舗の予約・来店・売上を取得 → `daily.bookings`, `metrics30d.completedVisits / revenue` に充当
-- 請求書: 自社の請求管理DBから `invoices` を取得
+- 請求書: GAS 連携でスプレッドシートから直接取得（次節）
+
+## GAS連携（請求書スプレッドシート）
+
+`/invoices` ページは、Google スプレッドシートで管理している月別の請求情報を
+GAS Web App 経由で読み取り表示します。
+
+### 1. Apps Script のデプロイ
+
+1. 対象スプレッドシートで「拡張機能 → Apps Script」を開く
+2. `docs/gas/Code.gs` の内容を `Code.gs` に貼り付けて保存
+3. プロジェクト設定 → スクリプトプロパティ で `TOKEN` を追加（ランダム32文字以上推奨）
+4. デプロイ → 新しいデプロイ → 種類「ウェブアプリ」
+   - 実行: 自分
+   - アクセス: 全員
+   - 発行された URL を控える
+
+### 2. 環境変数
+
+`.env.local` を作成し以下を設定:
+
+```
+SHEETS_GAS_URL=https://script.google.com/macros/s/.../exec
+SHEETS_GAS_TOKEN=（Apps Script に登録した TOKEN と同じ値）
+```
+
+### 3. シート列マッピング
+
+`docs/gas/Code.gs` の `COLUMN_INDEX` で列を定義しています。実シートの列構成に合わせて
+編集してください。デフォルトは下記:
+
+| 列 | 内容 | アプリ側 |
+|---|---|---|
+| A | サロン名 | クライアント名 |
+| D | 振替or請求書 | 支払方法 |
+| E | 加入者識別番号 | subscriberId |
+| F | 振込名 | payeeName |
+| G | 請求金額税込 | amount |
+| H | 進捗状況 | status 算出 |
+| N | 口座振替進捗 | status 算出 |
+| O | メモ | note |
+| P | 継続ステータス | "解約" は draft |
+| Q | マーケティング担当 | marketer |
+
+### 4. 月別タブの解決
+
+`?month=YYYY-MM` で対象タブを切り替え可能。タブ名は
+
+1. `2026-04`
+2. `2026年4月_請求管理`
+3. `2026年4月`
+4. `請求管理`
+5. アクティブシート
+
+の順に検索します。
+
+### 5. 動作確認
+
+ブラウザで以下を直接開き、JSON が返ることを確認:
+
+```
+https://script.google.com/macros/s/.../exec?token=YOUR_TOKEN&month=2026-04
+```
+
+`npm run dev` 後、`http://localhost:3000/invoices` でシート内容が表示されます。
+GAS 側で行を編集した場合、最大 60 秒のキャッシュ経由で反映されます（即時反映したい場合は
+`http://localhost:3000/api/invoices/sync?month=2026-04` を叩くか、サーバ再起動）。
