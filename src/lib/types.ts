@@ -17,6 +17,8 @@ export type DailyMetric = {
   bookings: number;
 };
 
+export type InvoicePaymentMethod = "振替" | "請求書";
+
 export type Invoice = {
   id: string;
   clientId: string;
@@ -29,6 +31,12 @@ export type Invoice = {
     quantity: number;
     unitPrice: number;
   }[];
+  paymentMethod?: InvoicePaymentMethod;
+  subscriberId?: string;
+  payeeName?: string;
+  note?: string;
+  subscriptionStatus?: string;
+  marketer?: string;
 };
 
 export type Client = {

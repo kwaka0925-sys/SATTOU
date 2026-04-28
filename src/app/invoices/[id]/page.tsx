@@ -2,23 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, Printer, Send } from "lucide-react";
 import TopBar from "@/components/TopBar";
-import { CLIENTS } from "@/lib/mock";
+import { findInvoiceById } from "@/lib/sheets";
+import { getClient } from "@/lib/mock";
 import { yen } from "@/lib/format";
 
-export function generateStaticParams() {
-  return CLIENTS.flatMap((c) => c.invoices.map((inv) => ({ id: inv.id })));
-}
+export const dynamic = "force-dynamic";
 
-export default function InvoiceDetail({ params }: { params: { id: string } }) {
-  const found = CLIENTS.flatMap((c) => c.invoices.map((inv) => ({ inv, client: c }))).find(
-    (r) => r.inv.id === params.id,
-  );
-  if (!found) notFound();
-  const { inv, client } = found;
+export default async function InvoiceDetail({ params }: { params: { id: string } }) {
+  const inv = await findInvoiceById(params.id);
+  if (!inv) notFound();
 
-  const subtotal = inv.items.reduce((s, it) => s + it.unitPrice * it.quantity, 0);
-  const tax = Math.round(subtotal * 0.1);
-  const total = subtotal + tax;
+  const client = inv.clientId ? getClient(inv.clientId) : undefined;
+
+  const total = inv.amount;
+  const subtotal = Math.round(total / 1.1);
+  const tax = total - subtotal;
 
   const statusLabel =
     inv.status === "paid"
@@ -31,7 +29,7 @@ export default function InvoiceDetail({ params }: { params: { id: string } }) {
 
   return (
     <div>
-      <TopBar title={`請求書 ${inv.id}`} subtitle={`宛先: ${client.name}`} />
+      <TopBar title={`請求書 ${inv.id}`} subtitle={`宛先: ${inv.clientName}`} />
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
           <Link href="/invoices" className="text-sm text-slate-500 inline-flex items-center gap-1 hover:text-brand-700">
@@ -50,9 +48,19 @@ export default function InvoiceDetail({ params }: { params: { id: string } }) {
               <div className="text-3xl font-bold tracking-tight">請求書</div>
               <div className="text-sm text-slate-500 mt-1">INVOICE</div>
               <div className="mt-4 text-sm">
-                <div className="font-medium text-base">{client.name} 御中</div>
-                <div className="text-slate-500">{client.prefecture}</div>
-                <div className="text-slate-500">担当: {client.representative} 様</div>
+                <div className="font-medium text-base">{inv.clientName} 御中</div>
+                {client && (
+                  <>
+                    <div className="text-slate-500">{client.prefecture}</div>
+                    <div className="text-slate-500">担当: {client.representative} 様</div>
+                  </>
+                )}
+                {inv.payeeName && (
+                  <div className="text-slate-500 mt-1">振込名義: {inv.payeeName}</div>
+                )}
+                {inv.subscriberId && (
+                  <div className="text-slate-500">加入者識別番号: {inv.subscriberId}</div>
+                )}
               </div>
             </div>
             <div className="text-right text-sm">
@@ -62,13 +70,16 @@ export default function InvoiceDetail({ params }: { params: { id: string } }) {
               <div className="text-slate-500 mt-2">請求書番号: <span className="font-mono">{inv.id}</span></div>
               <div className="text-slate-500">発行日: {inv.issueDate}</div>
               <div className="text-slate-500">支払期日: {inv.dueDate}</div>
+              {inv.paymentMethod && (
+                <div className="text-slate-500">支払方法: {inv.paymentMethod}</div>
+              )}
             </div>
           </div>
 
           <div className="mt-6 flex items-center justify-between">
             <div>
               <div className="text-sm text-slate-500">ご請求金額（税込）</div>
-              <div className="text-3xl font-bold mt-1">{yen(total)}</div>
+              <div className="text-3xl font-bold mt-1">{yen(inv.amount)}</div>
             </div>
             <span
               className={`pill text-sm px-3 py-1 ${
@@ -111,15 +122,15 @@ export default function InvoiceDetail({ params }: { params: { id: string } }) {
           <div className="mt-6 flex justify-end">
             <div className="w-72 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">小計</span>
+                <span className="text-slate-500">小計（税抜）</span>
                 <span className="tabular-nums">{yen(subtotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">消費税 (10%)</span>
+              <div className="flex justify-between text-slate-500">
+                <span>消費税 (10%)</span>
                 <span className="tabular-nums">{yen(tax)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold text-base">
-                <span>合計</span>
+                <span>合計（税込）</span>
                 <span className="tabular-nums">{yen(total)}</span>
               </div>
             </div>
@@ -128,7 +139,13 @@ export default function InvoiceDetail({ params }: { params: { id: string } }) {
           <div className="mt-10 pt-6 border-t border-slate-200 text-xs text-slate-500">
             <div className="font-medium text-slate-700 mb-1">お振込先</div>
             <div>みずほ銀行 渋谷支店 (普) 1234567 サットウ(カ</div>
-            <div className="mt-3 font-medium text-slate-700 mb-1">備考</div>
+            {inv.note && (
+              <>
+                <div className="mt-3 font-medium text-slate-700 mb-1">備考</div>
+                <div>{inv.note}</div>
+              </>
+            )}
+            <div className="mt-3 font-medium text-slate-700 mb-1">振込手数料</div>
             <div>お振込手数料は貴社にてご負担いただきますようお願いいたします。</div>
           </div>
         </div>
