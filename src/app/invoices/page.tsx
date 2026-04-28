@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { CLIENTS } from "@/lib/mock";
 import { yen } from "@/lib/format";
 import TopBar from "@/components/TopBar";
-import { FileText, Search } from "lucide-react";
+import { FileSpreadsheet, FileText, Search } from "lucide-react";
 import type { Invoice } from "@/lib/types";
 
 type Row = Invoice & { clientName: string };
@@ -85,7 +85,11 @@ export default function InvoicesPage() {
             <option value="overdue">期限超過</option>
             <option value="draft">下書き</option>
           </select>
-          <button className="btn-primary ml-auto">
+          <Link href="/invoices/import" className="btn-ghost ml-auto">
+            <FileSpreadsheet className="w-4 h-4" />
+            スプレッドシート取り込み
+          </Link>
+          <button className="btn-primary">
             <FileText className="w-4 h-4" />
             一括請求書を作成
           </button>
