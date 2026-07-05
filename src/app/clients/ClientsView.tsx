@@ -96,6 +96,11 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
             <code className="font-mono">?month=YYYY-MM</code> で別の月を指定できます。
           </div>
         )}
+        {configured && rows.length > 0 && totals.amount === 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+            接続中のシートに請求金額列（G列）のデータが見つかりません。<strong>請求書管理タブ</strong>とは別のタブ（例: sattou導入店舗）を読み込んでいる可能性があります。店舗一覧は <a href="/stores" className="underline text-brand-700">sattou導入店舗</a> に表示されます。
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="card p-5">

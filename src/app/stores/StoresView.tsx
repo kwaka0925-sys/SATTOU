@@ -13,9 +13,17 @@ type CreativeFilter = "all" | string;
 
 type Props = {
   rows: StoreRow[];
+  configured: boolean;
+  sheetName?: string;
+  month: string;
 };
 
-export default function StoresView({ rows }: Props) {
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-");
+  return `${y}年${parseInt(m, 10)}月`;
+}
+
+export default function StoresView({ rows, configured, sheetName, month }: Props) {
   const [q, setQ] = useState("");
   const [cancel, setCancel] = useState<CancelFilter>("all");
   const [template, setTemplate] = useState<TemplateFilter>("all");
@@ -62,12 +70,25 @@ export default function StoresView({ rows }: Props) {
     <div>
       <TopBar
         title="sattou導入店舗"
-        subtitle={`全 ${rows.length} 店舗 / 表示 ${filtered.length} 店舗 · 導入・解約・連携状況の一覧`}
+        subtitle={
+          sheetName
+            ? `${sheetName} · 全 ${rows.length} 店舗 / 表示 ${filtered.length} 店舗`
+            : `全 ${rows.length} 店舗 / 表示 ${filtered.length} 店舗`
+        }
       />
       <div className="p-6 space-y-4">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
-          この画面は sattou 導入店舗管理シートを表示する予定です。対象タブ名と列マッピングが確定次第、GAS 連携で実データに切り替えられます。
-        </div>
+        {!configured && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
+            GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
+            <code className="font-mono"> SHEETS_GAS_TOKEN </code>
+            を Vercel の環境変数に登録すると、導入店舗シートの実データが反映されます。
+          </div>
+        )}
+        {configured && rows.length === 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+            {monthLabel(month)}分のデータがシートに見つかりませんでした。<code className="font-mono">?month=YYYY-MM</code> で別の月を指定できます。
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="card p-5">
@@ -168,29 +189,39 @@ export default function StoresView({ rows }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((r) => (
-                  <tr key={r.clientId} className="hover:bg-slate-50">
+                {filtered.map((r, idx) => (
+                  <tr key={`${r.identifier || r.clientName}-${r.order}-${idx}`} className="hover:bg-slate-50">
                     <td className="px-3 py-3 text-right tabular-nums text-slate-500">{r.order}</td>
                     <td className="px-4 py-3 sticky left-0 bg-white z-10">
-                      <Link
-                        href={`/clients/${r.clientId}`}
-                        className="font-medium hover:text-brand-700"
-                      >
-                        {r.clientName}
-                      </Link>
-                      <div className="text-xs text-slate-500 mt-0.5">{r.brand}</div>
+                      {r.clientId ? (
+                        <Link
+                          href={`/clients/${r.clientId}`}
+                          className="font-medium hover:text-brand-700"
+                        >
+                          {r.clientName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{r.clientName}</span>
+                      )}
+                      {r.brand && (
+                        <div className="text-xs text-slate-500 mt-0.5">{r.brand}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs max-w-[220px] truncate"
-                        title={r.url}
-                      >
-                        {r.url.replace(/^https?:\/\//, "")}
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                      </a>
+                      {r.url ? (
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs max-w-[220px] truncate"
+                          title={r.url}
+                        >
+                          {r.url.replace(/^https?:\/\//, "")}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -230,16 +261,20 @@ export default function StoresView({ rows }: Props) {
                         {r.hpbLinked}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.identifier}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.identifier || "—"}</td>
                     <td className="px-4 py-3">
-                      <a
-                        href={r.initialSheetUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs"
-                      >
-                        開く <ExternalLink className="w-3 h-3" />
-                      </a>
+                      {r.initialSheetUrl ? (
+                        <a
+                          href={r.initialSheetUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs"
+                        >
+                          開く <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

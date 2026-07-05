@@ -260,6 +260,108 @@ export async function fetchDashboardTotals(
   }
 }
 
+export type StoreSheetRow = {
+  order: number;
+  identifier: string;
+  clientId: string | null;
+  clientName: string;
+  url: string;
+  templateInstalled: string;
+  cancelled: string;
+  creative: string;
+  marketer: string;
+  systemDelivery: string;
+  legacyUser: string;
+  since: string;
+  hpbLinked: string;
+  initialSheetUrl: string;
+};
+
+export type StoreSheetResult = {
+  configured: boolean;
+  sheetName?: string;
+  rows: StoreSheetRow[];
+};
+
+// Reinterpret the sheet columns for the "sattou導入店舗" view:
+//   A → order        (was salonName in billing mapping)
+//   E → clientName   (was subscriberId)
+//   F → url          (was payeeName)
+//   Q → identifier   (was marketer)
+//   N → hpbLinked    (was bankTransferProgress; often ✓)
+//   P → cancelled/継続 (was subscriptionStatus)
+export async function fetchStoresFromSheet(
+  month: string = currentMonth(),
+): Promise<StoreSheetResult> {
+  if (!isConfigured()) return { configured: false, rows: [] };
+
+  const url = new URL(process.env.SHEETS_GAS_URL!);
+  url.searchParams.set("token", process.env.SHEETS_GAS_TOKEN!);
+  url.searchParams.set("month", month);
+
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
+    });
+    if (!res.ok) {
+      console.warn(`[sheets] GAS responded ${res.status}`);
+      return { configured: true, rows: [] };
+    }
+    const data = (await res.json()) as {
+      rows?: SheetRow[];
+      sheet?: string;
+      error?: string;
+    };
+    if (data.error) {
+      console.warn(`[sheets] GAS error: ${data.error}`);
+      return { configured: true, sheetName: data.sheet, rows: [] };
+    }
+    const rows = (data.rows ?? []).filter(
+      (r) => (r.subscriberId ?? "").trim() || (r.salonName ?? "").trim(),
+    );
+    const stores: StoreSheetRow[] = rows.map((r, i) => {
+      const clientName =
+        (r.subscriberId ?? "").trim() ||
+        (typeof r.salonName === "string" ? r.salonName.trim() : "") ||
+        "—";
+      const identifier = (r.marketer ?? "").trim();
+      const urlValue = (r.payeeName ?? "").trim();
+      const orderRaw =
+        typeof r.salonName === "string" ? parseInt(r.salonName, 10) : NaN;
+      const order = Number.isFinite(orderRaw) ? orderRaw : i + 1;
+      const cancelled = (r.subscriptionStatus ?? "").includes("解約")
+        ? "解約"
+        : "継続";
+      const hpbLinked = (r.bankTransferProgress ?? "").trim() || "—";
+      const clientId = resolveClientId(clientName);
+      return {
+        order,
+        identifier,
+        clientId,
+        clientName,
+        url: urlValue,
+        templateInstalled: (r.progress ?? "").trim() || "—",
+        cancelled,
+        creative: "—",
+        marketer: identifier,
+        systemDelivery: "—",
+        legacyUser: "—",
+        since: "",
+        hpbLinked,
+        initialSheetUrl: (r.otherAdSpendUrl ?? "").trim(),
+      };
+    });
+    return {
+      configured: true,
+      sheetName: data.sheet,
+      rows: stores,
+    };
+  } catch (err) {
+    console.warn("[sheets] fetch failed", err);
+    return { configured: true, rows: [] };
+  }
+}
+
 export async function findInvoiceById(id: string): Promise<SheetInvoice | null> {
   const m = id.match(/^INV-(\d{4})(\d{2})-/);
   if (!m) return null;
