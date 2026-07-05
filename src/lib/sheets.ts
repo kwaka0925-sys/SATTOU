@@ -4,6 +4,8 @@ import type { Invoice, InvoicePaymentMethod } from "./types";
 export type SheetRow = {
   rowIndex: number;
   salonName: string;
+  brandCount?: number | string;
+  storeCount?: number | string;
   paymentMethod?: string;
   subscriberId?: string;
   payeeName?: string;
@@ -13,6 +15,16 @@ export type SheetRow = {
   note?: string;
   subscriptionStatus?: string;
   marketer?: string;
+};
+
+export type DashboardTotals = {
+  configured: boolean;
+  month: string;
+  sheetName?: string;
+  revenue: number;
+  customerCount: number;
+  brandCount: number;
+  storeCount: number;
 };
 
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
@@ -164,6 +176,58 @@ export async function fetchInvoicesFromSheet(
   } catch (err) {
     console.warn("[sheets] fetch failed", err);
     return [];
+  }
+}
+
+export async function fetchDashboardTotals(
+  month: string = currentMonth(),
+): Promise<DashboardTotals> {
+  const empty: DashboardTotals = {
+    configured: false,
+    month,
+    revenue: 0,
+    customerCount: 0,
+    brandCount: 0,
+    storeCount: 0,
+  };
+  if (!isConfigured()) return empty;
+
+  const url = new URL(process.env.SHEETS_GAS_URL!);
+  url.searchParams.set("token", process.env.SHEETS_GAS_TOKEN!);
+  url.searchParams.set("month", month);
+
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
+    });
+    if (!res.ok) {
+      console.warn(`[sheets] GAS responded ${res.status}`);
+      return { ...empty, configured: true };
+    }
+    const data = (await res.json()) as {
+      rows?: SheetRow[];
+      sheet?: string;
+      error?: string;
+    };
+    if (data.error) {
+      console.warn(`[sheets] GAS error: ${data.error}`);
+      return { ...empty, configured: true };
+    }
+    const rows = (data.rows ?? []).filter(
+      (r) => r.salonName && r.salonName.trim(),
+    );
+    return {
+      configured: true,
+      month,
+      sheetName: data.sheet,
+      revenue: rows.reduce((s, r) => s + parseAmount(r.amount), 0),
+      customerCount: rows.length,
+      brandCount: rows.reduce((s, r) => s + parseAmount(r.brandCount), 0),
+      storeCount: rows.reduce((s, r) => s + parseAmount(r.storeCount), 0),
+    };
+  } catch (err) {
+    console.warn("[sheets] fetch failed", err);
+    return { ...empty, configured: true };
   }
 }
 

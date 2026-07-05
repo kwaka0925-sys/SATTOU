@@ -9,18 +9,45 @@ import {
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import StatCard from "@/components/StatCard";
-import { CLIENTS, totalsAll } from "@/lib/mock";
+import { CLIENTS } from "@/lib/mock";
 import { num, yen } from "@/lib/format";
+import { fetchDashboardTotals, currentMonth } from "@/lib/sheets";
 import type { Industry } from "@/lib/types";
 
-export default function Page() {
-  const totals = totalsAll();
-  const brandCount = new Set(CLIENTS.map((c) => c.brand)).size;
+export const dynamic = "force-dynamic";
+
+type SearchParams = { month?: string };
+
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-");
+  return `${y}年${parseInt(m, 10)}月`;
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const month = searchParams?.month ?? currentMonth();
+  const sheetTotals = await fetchDashboardTotals(month);
+
+  const mockRevenue = CLIENTS.reduce((s, c) => s + c.monthlyFee, 0);
+  const mockCustomerCount = CLIENTS.length;
+  const mockBrandCount = new Set(CLIENTS.map((c) => c.brand)).size;
+
+  const useSheet = sheetTotals.configured && sheetTotals.customerCount > 0;
+  const revenue = useSheet ? sheetTotals.revenue : mockRevenue;
+  const customerCount = useSheet ? sheetTotals.customerCount : mockCustomerCount;
+  const brandCount = useSheet ? sheetTotals.brandCount : mockBrandCount;
+
+  const dataHint = useSheet
+    ? `${monthLabel(month)}分 · 請求書シート集計`
+    : `モックデータ (${CLIENTS.length}社)`;
 
   const brandTotals = Object.entries(
     CLIENTS.reduce<Record<string, { revenue: number; count: number }>>((acc, c) => {
       acc[c.brand] ??= { revenue: 0, count: 0 };
-      acc[c.brand].revenue += c.metrics30d.revenue;
+      acc[c.brand].revenue += c.monthlyFee;
       acc[c.brand].count += 1;
       return acc;
     }, {}),
@@ -31,12 +58,12 @@ export default function Page() {
   const brandMax = brandTop[0]?.revenue ?? 1;
 
   const revenueTop5 = [...CLIENTS]
-    .sort((a, b) => b.metrics30d.revenue - a.metrics30d.revenue)
+    .sort((a, b) => b.monthlyFee - a.monthlyFee)
     .slice(0, 5);
 
   const industryTotals = Object.entries(
     CLIENTS.reduce<Record<Industry, number>>((acc, c) => {
-      acc[c.industry] = (acc[c.industry] ?? 0) + c.metrics30d.revenue;
+      acc[c.industry] = (acc[c.industry] ?? 0) + c.monthlyFee;
       return acc;
     }, {} as Record<Industry, number>),
   )
@@ -48,39 +75,54 @@ export default function Page() {
     <div>
       <TopBar
         title="ダッシュボード"
-        subtitle="経営指標サマリー — 直近30日の全社パフォーマンス"
+        subtitle={`SATTOU 経営指標サマリー — ${monthLabel(month)}分`}
       />
 
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             label="総売上"
-            value={yen(totals.revenue)}
-            delta={7.3}
+            value={yen(revenue)}
             icon={<Coins className="w-4 h-4" />}
-            hint="直近30日"
+            hint={dataHint}
           />
           <StatCard
             label="総顧客数"
-            value={num(totals.completedVisits)}
-            delta={5.2}
+            value={num(customerCount)}
             icon={<Users className="w-4 h-4" />}
-            hint="来店確定ベース"
+            hint={useSheet ? "請求先サロン" : `全 ${CLIENTS.length} 社`}
           />
           <StatCard
             label="総ブランド数"
             value={num(brandCount)}
             icon={<Store className="w-4 h-4" />}
-            hint={`${CLIENTS.length} 店舗を運営`}
+            hint={
+              useSheet
+                ? sheetTotals.storeCount
+                  ? `店舗数 ${num(sheetTotals.storeCount)}`
+                  : "請求先合計"
+                : `${CLIENTS.length} 店舗を運営`
+            }
           />
         </div>
+
+        {!sheetTotals.configured && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
+            KPI はモックデータで表示中。<code>SHEETS_GAS_URL</code> と <code>SHEETS_GAS_TOKEN</code> を Vercel の環境変数に登録すると、請求書シートの月次総計に切り替わります。詳細は README の GAS連携セクションを参照。
+          </div>
+        )}
+        {sheetTotals.configured && !useSheet && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+            {monthLabel(month)} 分のデータが請求書シートに見つかりませんでした。<code>?month=YYYY-MM</code> で別の月を指定できます。
+          </div>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="card p-5 xl:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-semibold flex items-center gap-2">
-                  <Store className="w-4 h-4 text-brand-600" /> ブランド別売上ランキング
+                  <Store className="w-4 h-4 text-brand-600" /> ブランド別月額売上 (デモ)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">上位 {brandTop.length} ブランド / 全 {brandTotals.length} ブランド</p>
               </div>
@@ -113,7 +155,7 @@ export default function Page() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-amber-500" /> 売上TOP5 クライアント
+                <Trophy className="w-4 h-4 text-amber-500" /> 月額売上 TOP5 (デモ)
               </h2>
               <Link href="/clients" className="text-xs text-brand-700 inline-flex items-center gap-1">
                 全件 <ArrowUpRight className="w-3 h-3" />
@@ -132,8 +174,8 @@ export default function Page() {
                     <div className="text-xs text-slate-500 truncate">{c.brand}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold">{yen(c.metrics30d.revenue)}</div>
-                    <div className="text-xs text-slate-500">来店 {num(c.metrics30d.completedVisits)}件</div>
+                    <div className="font-semibold">{yen(c.monthlyFee)}</div>
+                    <div className="text-xs text-slate-500">{c.industry}</div>
                   </div>
                 </li>
               ))}
@@ -144,7 +186,7 @@ export default function Page() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold flex items-center gap-2">
-              <PieChart className="w-4 h-4 text-brand-600" /> 業種別売上構成
+              <PieChart className="w-4 h-4 text-brand-600" /> 業種別月額売上構成 (デモ)
             </h2>
             <span className="text-xs text-slate-500">合計 {yen(industryTotal)}</span>
           </div>

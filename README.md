@@ -86,10 +86,12 @@ SHEETS_GAS_TOKEN=（Apps Script に登録した TOKEN と同じ値）
 | 列 | 内容 | アプリ側 |
 |---|---|---|
 | A | サロン名 | クライアント名 |
+| B | ブランド数 | brandCount（ダッシュボードの総ブランド数集計に利用） |
+| C | 店舗数 | storeCount（ダッシュボードの総店舗数集計に利用） |
 | D | 振替or請求書 | 支払方法 |
 | E | 加入者識別番号 | subscriberId |
 | F | 振込名 | payeeName |
-| G | 請求金額税込 | amount |
+| G | 請求金額税込 | amount（合計がダッシュボードの総売上に反映） |
 | H | 進捗状況 | status 算出 |
 | N | 口座振替進捗 | status 算出 |
 | O | メモ | note |

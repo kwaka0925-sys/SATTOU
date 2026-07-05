@@ -8,8 +8,8 @@
  *
  * 想定スプレッドシート列 (ヘッダ行 = 1行目、データは4行目以降):
  *   A: サロン名
- *   B: ブランド数         (未使用)
- *   C: 店舗数             (未使用)
+ *   B: ブランド数         → brandCount (ダッシュボードの総ブランド数集計に利用)
+ *   C: 店舗数             → storeCount (ダッシュボードの総店舗数集計に利用)
  *   D: 振替or請求書       → paymentMethod
  *   E: 加入者識別番号     → subscriberId
  *   F: 振込名             → payeeName
@@ -49,6 +49,8 @@ const DATA_START_ROW = 4;
 
 const COLUMN_INDEX = {
   salonName: 1,            // A
+  brandCount: 2,           // B
+  storeCount: 3,           // C
   paymentMethod: 4,        // D
   subscriberId: 5,         // E
   payeeName: 6,            // F
@@ -123,6 +125,8 @@ function readRows_(sheet) {
     out.push({
       rowIndex: DATA_START_ROW + i,
       salonName: salon,
+      brandCount: numberAt_(row, COLUMN_INDEX.brandCount),
+      storeCount: numberAt_(row, COLUMN_INDEX.storeCount),
       paymentMethod: stringAt_(row, COLUMN_INDEX.paymentMethod),
       subscriberId: stringAt_(row, COLUMN_INDEX.subscriberId),
       payeeName: stringAt_(row, COLUMN_INDEX.payeeName),
