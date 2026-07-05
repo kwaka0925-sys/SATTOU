@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import { Check, ExternalLink, Filter, Search } from "lucide-react";
@@ -22,11 +22,47 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+const CANCELLED_STORAGE_KEY = "sattou-cancelled-stores";
+
+function rowKey(r: StoreRow): string {
+  return r.identifier || r.clientName || String(r.order);
+}
+
 export default function StoresView({ rows, configured, sheetName, month }: Props) {
   const [q, setQ] = useState("");
   const [cancel, setCancel] = useState<CancelFilter>("all");
   const [legacy, setLegacy] = useState<LegacyFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
+  const [cancelledSet, setCancelledSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(CANCELLED_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setCancelledSet(new Set(parsed));
+      }
+    } catch {
+      // ignore malformed storage
+    }
+  }, []);
+
+  const toggleCancelled = (key: string) => {
+    setCancelledSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        window.localStorage.setItem(
+          CANCELLED_STORAGE_KEY,
+          JSON.stringify([...next]),
+        );
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  };
 
   const marketers = useMemo(
     () => Array.from(new Set(rows.map((r) => r.marketer).filter(Boolean))).sort(),
@@ -35,7 +71,9 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (cancel !== "all" && r.cancelled !== cancel) return false;
+      const isCancelled = cancelledSet.has(rowKey(r));
+      if (cancel === "解約" && !isCancelled) return false;
+      if (cancel === "継続" && isCancelled) return false;
       if (legacy === "yes" && !r.legacyUser) return false;
       if (legacy === "no" && r.legacyUser) return false;
       if (marketer !== "all" && r.marketer !== marketer) return false;
@@ -46,12 +84,12 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
       }
       return true;
     });
-  }, [rows, q, cancel, legacy, marketer]);
+  }, [rows, q, cancel, legacy, marketer, cancelledSet]);
 
   const totals = filtered.reduce(
     (acc, r) => ({
       total: acc.total + 1,
-      cancelled: acc.cancelled + (r.cancelled === "解約" ? 1 : 0),
+      cancelled: acc.cancelled + (cancelledSet.has(rowKey(r)) ? 1 : 0),
       legacy: acc.legacy + (r.legacyUser ? 1 : 0),
       hpb: acc.hpb + (r.hpbLinked === "連携" || r.hpbLinked === "✓" ? 1 : 0),
     }),
@@ -201,11 +239,17 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {r.cancelled === "解約" ? (
-                        <span className="pill bg-rose-50 text-rose-700">解約</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
+                      <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={cancelledSet.has(rowKey(r))}
+                          onChange={() => toggleCancelled(rowKey(r))}
+                          className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        {cancelledSet.has(rowKey(r)) && (
+                          <span className="pill bg-rose-50 text-rose-700">解約</span>
+                        )}
+                      </label>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600">{r.marketer || "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">

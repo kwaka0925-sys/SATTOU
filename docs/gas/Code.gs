@@ -145,7 +145,7 @@ function readRows_(sheet) {
       paymentMethod: stringAt_(row, COLUMN_INDEX.paymentMethod),
       subscriberId: stringAt_(row, COLUMN_INDEX.subscriberId),
       payeeName: stringAt_(row, COLUMN_INDEX.payeeName),
-      amount: numberAt_(row, COLUMN_INDEX.amount),
+      amount: rawAt_(row, COLUMN_INDEX.amount),
       progress: stringAt_(row, COLUMN_INDEX.progress),
       legacyUser: rawAt_(row, COLUMN_INDEX.legacyUser),
       bankTransferProgress: stringAt_(row, COLUMN_INDEX.bankTransferProgress),
@@ -168,11 +168,15 @@ function stringAt_(row, col) {
   return String(v).trim();
 }
 
-// Preserve checkbox booleans (TRUE/FALSE) and other raw values.
+// Preserve checkbox booleans, dates (as ISO yyyy-MM-dd), and other raw values.
 function rawAt_(row, col) {
   const v = row[col - 1];
-  if (v === null || v === undefined) return '';
+  if (v === null || v === undefined || v === '') return '';
   if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v;
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
   return String(v).trim();
 }
 

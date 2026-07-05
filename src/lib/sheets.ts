@@ -280,10 +280,35 @@ function isTruthyFlag(v: unknown): boolean {
   if (typeof v === "number") return v !== 0;
   if (typeof v === "string") {
     const s = v.trim().toLowerCase();
-    if (!s) return false;
-    return ["true", "✓", "○", "1", "yes", "はい", "有"].includes(s);
+    if (!s || s === "false" || s === "no" || s === "0") return false;
+    return true;
   }
   return false;
+}
+
+function formatDeliveryDate(v: unknown): string {
+  if (v == null || v === "" || v === 0) return "";
+  const s = typeof v === "number" ? String(v) : String(v).trim();
+  if (!s) return "";
+
+  // ISO or slash: 2026-10-15 / 2026/10/15
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return `${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日導入済み`;
+
+  // Japanese: 10月15日 or 10月15日... (leave suffix as-is if present)
+  m = s.match(/^(\d{1,2})月(\d{1,2})日/);
+  if (m) {
+    const rest = s.slice(m[0].length);
+    return rest.includes("導入")
+      ? s
+      : `${parseInt(m[1], 10)}月${parseInt(m[2], 10)}日導入済み`;
+  }
+
+  // Slash: 10/15 or 10/15/2026
+  m = s.match(/^(\d{1,2})[/](\d{1,2})/);
+  if (m) return `${parseInt(m[1], 10)}月${parseInt(m[2], 10)}日導入済み`;
+
+  return s;
 }
 
 export type StoreSheetResult = {
@@ -340,8 +365,7 @@ export async function fetchStoresFromSheet(
       const order = Number.isFinite(orderRaw) ? orderRaw : i + 1;
       const hpbLinked = (r.bankTransferProgress ?? "").trim() || "—";
       const clientId = resolveClientId(clientName);
-      const amountRaw = parseAmount(r.amount);
-      const systemDelivery = amountRaw ? String(amountRaw) : "";
+      const systemDelivery = formatDeliveryDate(r.amount);
       return {
         order,
         identifier,
