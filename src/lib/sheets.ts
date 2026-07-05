@@ -30,6 +30,10 @@ export type DashboardTotals = {
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
   clientName: string;
   clientId: string | null;
+  brandCount?: number;
+  storeCount?: number;
+  progress?: string;
+  bankTransferProgress?: string;
 };
 
 const REVALIDATE_SECONDS = 60;
@@ -117,6 +121,8 @@ export function rowToInvoice(row: SheetRow, month: string): SheetInvoice {
   const paymentMethod = normalizePaymentMethod(row.paymentMethod);
   const id = `INV-${month.replace("-", "")}-${String(row.rowIndex).padStart(3, "0")}`;
   const clientId = resolveClientId(row.salonName);
+  const brandCount = parseAmount(row.brandCount) || undefined;
+  const storeCount = parseAmount(row.storeCount) || undefined;
 
   return {
     id,
@@ -139,6 +145,10 @@ export function rowToInvoice(row: SheetRow, month: string): SheetInvoice {
     note: row.note || undefined,
     subscriptionStatus: row.subscriptionStatus || undefined,
     marketer: row.marketer || undefined,
+    brandCount,
+    storeCount,
+    progress: row.progress || undefined,
+    bankTransferProgress: row.bankTransferProgress || undefined,
   };
 }
 
