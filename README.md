@@ -119,3 +119,40 @@ https://script.google.com/macros/s/.../exec?token=YOUR_TOKEN&month=2026-04
 `npm run dev` 後、`http://localhost:3000/invoices` でシート内容が表示されます。
 GAS 側で行を編集した場合、最大 60 秒のキャッシュ経由で反映されます（即時反映したい場合は
 `http://localhost:3000/api/invoices/sync?month=2026-04` を叩くか、サーバ再起動）。
+
+## Vercel へのデプロイ
+
+このアプリは Next.js 14 App Router のため、Vercel にそのままデプロイできます。
+
+### 1. Vercel にサインイン
+
+[https://vercel.com/signup](https://vercel.com/signup) から GitHub アカウントで
+サインイン（無料の Hobby プランで十分）。
+
+### 2. プロジェクトをインポート
+
+以下のワンクリック URL からインポート:
+
+**[https://vercel.com/new/clone?repository-url=https://github.com/kwaka0925-sys/sattou](https://vercel.com/new/clone?repository-url=https://github.com/kwaka0925-sys/sattou)**
+
+または [https://vercel.com/new](https://vercel.com/new) で `kwaka0925-sys/sattou` を選択。
+
+- Framework Preset: **Next.js**（自動検出）
+- Build Command / Output Directory: 変更不要
+
+### 3. 環境変数（任意）
+
+`/invoices` タブで GAS 連携を使う場合のみ、Vercel ダッシュボードの
+Project → Settings → Environment Variables で追加:
+
+| Key | Value |
+|---|---|
+| `SHEETS_GAS_URL` | GAS Web App の `/exec` URL |
+| `SHEETS_GAS_TOKEN` | Apps Script プロパティに登録した TOKEN |
+
+未設定でもデプロイは成功し、`/invoices` はセットアップ案内が表示されます。
+
+### 4. デプロイ
+
+「Deploy」を押すと 2〜3 分で `https://sattou-xxxx.vercel.app` 形式の URL が発行されます。
+以降 `main` への push で自動再デプロイ。
