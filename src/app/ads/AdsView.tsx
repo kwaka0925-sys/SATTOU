@@ -57,7 +57,7 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
   return (
     <div>
       <TopBar
-        title="広告分析"
+        title="運用代行売上"
         subtitle={`${monthLabel(month)}分 · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
       />
       <div className="p-6 space-y-4">

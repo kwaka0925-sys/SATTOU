@@ -11,6 +11,7 @@ import {
   CircleDot,
   BarChart3,
   Upload,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,12 +39,13 @@ const NAV_SECTIONS: NavSection[] = [
     title: "クライアント",
     items: [
       { href: "/clients", label: "クライアント一覧", icon: Users },
+      { href: "/stores", label: "sattou導入店舗", icon: Building2 },
     ],
   },
   {
-    title: "広告分析",
+    title: "広告売上費",
     items: [
-      { href: "/ads", label: "広告分析", icon: BarChart3 },
+      { href: "/ads", label: "広告売上費", icon: BarChart3 },
     ],
   },
   {
