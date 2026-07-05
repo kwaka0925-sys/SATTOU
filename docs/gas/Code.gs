@@ -15,6 +15,7 @@
  *   F: 振込名             → payeeName
  *   G: 請求金額税込       → amount
  *   H: 進捗状況           → progress (請求書系の入金状況)
+ *   L: 旧SATTOUユーザ     → legacyUser (チェック済みか否か)
  *   N: 口座振替進捗       → bankTransferProgress
  *   O: メモ               → note
  *   P: 継続ステータス     → subscriptionStatus
@@ -64,6 +65,7 @@ const COLUMN_INDEX = {
   payeeName: 6,            // F
   amount: 7,               // G
   progress: 8,             // H
+  legacyUser: 12,          // L
   bankTransferProgress: 14, // N
   note: 15,                // O
   subscriptionStatus: 16,  // P
@@ -145,6 +147,7 @@ function readRows_(sheet) {
       payeeName: stringAt_(row, COLUMN_INDEX.payeeName),
       amount: numberAt_(row, COLUMN_INDEX.amount),
       progress: stringAt_(row, COLUMN_INDEX.progress),
+      legacyUser: rawAt_(row, COLUMN_INDEX.legacyUser),
       bankTransferProgress: stringAt_(row, COLUMN_INDEX.bankTransferProgress),
       note: stringAt_(row, COLUMN_INDEX.note),
       subscriptionStatus: stringAt_(row, COLUMN_INDEX.subscriptionStatus),
@@ -162,6 +165,14 @@ function readRows_(sheet) {
 function stringAt_(row, col) {
   const v = row[col - 1];
   if (v === null || v === undefined) return '';
+  return String(v).trim();
+}
+
+// Preserve checkbox booleans (TRUE/FALSE) and other raw values.
+function rawAt_(row, col) {
+  const v = row[col - 1];
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'boolean') return v;
   return String(v).trim();
 }
 

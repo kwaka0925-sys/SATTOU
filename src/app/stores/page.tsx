@@ -5,7 +5,7 @@ import {
 } from "@/lib/sheets";
 import StoresView from "./StoresView";
 
-export type StoreRow = StoreSheetRow & { brand: string };
+export type StoreRow = StoreSheetRow;
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +18,9 @@ export default async function StoresPage({
 }) {
   const month = searchParams?.month ?? currentMonth();
   const result = await fetchStoresFromSheet(month);
-  const rows: StoreRow[] = result.rows.map((r) => ({ ...r, brand: "" }));
   return (
     <StoresView
-      rows={rows}
+      rows={result.rows}
       configured={result.configured}
       sheetName={result.sheetName}
       month={month}

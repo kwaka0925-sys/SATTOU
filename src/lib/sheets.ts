@@ -11,6 +11,7 @@ export type SheetRow = {
   payeeName?: string;
   amount?: number | string;
   progress?: string;
+  legacyUser?: boolean | string;
   bankTransferProgress?: string;
   note?: string;
   subscriptionStatus?: string;
@@ -266,16 +267,24 @@ export type StoreSheetRow = {
   clientId: string | null;
   clientName: string;
   url: string;
-  templateInstalled: string;
   cancelled: string;
-  creative: string;
   marketer: string;
   systemDelivery: string;
-  legacyUser: string;
-  since: string;
+  legacyUser: boolean;
   hpbLinked: string;
   initialSheetUrl: string;
 };
+
+function isTruthyFlag(v: unknown): boolean {
+  if (v === true) return true;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (!s) return false;
+    return ["true", "✓", "○", "1", "yes", "はい", "有"].includes(s);
+  }
+  return false;
+}
 
 export type StoreSheetResult = {
   configured: boolean;
@@ -329,24 +338,20 @@ export async function fetchStoresFromSheet(
       const orderRaw =
         typeof r.salonName === "string" ? parseInt(r.salonName, 10) : NaN;
       const order = Number.isFinite(orderRaw) ? orderRaw : i + 1;
-      const cancelled = (r.subscriptionStatus ?? "").includes("解約")
-        ? "解約"
-        : "継続";
       const hpbLinked = (r.bankTransferProgress ?? "").trim() || "—";
       const clientId = resolveClientId(clientName);
+      const amountRaw = parseAmount(r.amount);
+      const systemDelivery = amountRaw ? String(amountRaw) : "";
       return {
         order,
         identifier,
         clientId,
         clientName,
         url: urlValue,
-        templateInstalled: (r.progress ?? "").trim() || "—",
-        cancelled,
-        creative: "—",
+        cancelled: "",
         marketer: identifier,
-        systemDelivery: "—",
-        legacyUser: "—",
-        since: "",
+        systemDelivery,
+        legacyUser: isTruthyFlag(r.legacyUser),
         hpbLinked,
         initialSheetUrl: (r.otherAdSpendUrl ?? "").trim(),
       };

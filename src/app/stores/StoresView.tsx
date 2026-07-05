@@ -4,12 +4,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
-import { ExternalLink, Filter, Search } from "lucide-react";
+import { Check, ExternalLink, Filter, Search } from "lucide-react";
 import type { StoreRow } from "./page";
 
 type CancelFilter = "all" | "継続" | "解約";
-type TemplateFilter = "all" | "済" | "未";
-type CreativeFilter = "all" | string;
+type LegacyFilter = "all" | "yes" | "no";
 
 type Props = {
   rows: StoreRow[];
@@ -26,44 +25,37 @@ function monthLabel(month: string): string {
 export default function StoresView({ rows, configured, sheetName, month }: Props) {
   const [q, setQ] = useState("");
   const [cancel, setCancel] = useState<CancelFilter>("all");
-  const [template, setTemplate] = useState<TemplateFilter>("all");
-  const [creative, setCreative] = useState<CreativeFilter>("all");
+  const [legacy, setLegacy] = useState<LegacyFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
 
   const marketers = useMemo(
     () => Array.from(new Set(rows.map((r) => r.marketer).filter(Boolean))).sort(),
     [rows],
   );
-  const creatives = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.creative).filter(Boolean))).sort(),
-    [rows],
-  );
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (cancel !== "all" && r.cancelled !== cancel) return false;
-      if (template !== "all" && r.templateInstalled !== template) return false;
-      if (creative !== "all" && r.creative !== creative) return false;
+      if (legacy === "yes" && !r.legacyUser) return false;
+      if (legacy === "no" && r.legacyUser) return false;
       if (marketer !== "all" && r.marketer !== marketer) return false;
       if (q) {
         const qq = q.toLowerCase();
-        const hay = [r.clientName, r.identifier, r.brand]
-          .join(" ")
-          .toLowerCase();
+        const hay = [r.clientName, r.identifier].join(" ").toLowerCase();
         if (!hay.includes(qq)) return false;
       }
       return true;
     });
-  }, [rows, q, cancel, template, creative, marketer]);
+  }, [rows, q, cancel, legacy, marketer]);
 
   const totals = filtered.reduce(
     (acc, r) => ({
       total: acc.total + 1,
       cancelled: acc.cancelled + (r.cancelled === "解約" ? 1 : 0),
-      template: acc.template + (r.templateInstalled === "済" ? 1 : 0),
-      hpb: acc.hpb + (r.hpbLinked === "連携" ? 1 : 0),
+      legacy: acc.legacy + (r.legacyUser ? 1 : 0),
+      hpb: acc.hpb + (r.hpbLinked === "連携" || r.hpbLinked === "✓" ? 1 : 0),
     }),
-    { total: 0, cancelled: 0, template: 0, hpb: 0 },
+    { total: 0, cancelled: 0, legacy: 0, hpb: 0 },
   );
 
   return (
@@ -100,8 +92,8 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             <div className="text-2xl font-semibold mt-1 text-rose-600">{num(totals.cancelled)}</div>
           </div>
           <div className="card p-5">
-            <div className="text-sm text-slate-500">テンプレート設置済</div>
-            <div className="text-2xl font-semibold mt-1 text-emerald-600">{num(totals.template)}</div>
+            <div className="text-sm text-slate-500">旧SATTOUユーザ</div>
+            <div className="text-2xl font-semibold mt-1">{num(totals.legacy)}</div>
           </div>
           <div className="card p-5">
             <div className="text-sm text-slate-500">HPB連携</div>
@@ -115,7 +107,7 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="サロン名 / 識別子 / ブランドで検索"
+              placeholder="サロン名 / 識別子で検索"
               className="input pl-9"
             />
           </div>
@@ -130,25 +122,13 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             <option value="解約">解約</option>
           </select>
           <select
-            value={template}
-            onChange={(e) => setTemplate(e.target.value as TemplateFilter)}
+            value={legacy}
+            onChange={(e) => setLegacy(e.target.value as LegacyFilter)}
             className="input w-auto"
           >
-            <option value="all">テンプレすべて</option>
-            <option value="済">済</option>
-            <option value="未">未</option>
-          </select>
-          <select
-            value={creative}
-            onChange={(e) => setCreative(e.target.value)}
-            className="input w-auto"
-          >
-            <option value="all">クリエイティブすべて</option>
-            {creatives.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
+            <option value="all">旧SATTOUすべて</option>
+            <option value="yes">旧SATTOUユーザ</option>
+            <option value="no">新規</option>
           </select>
           {marketers.length > 0 && (
             <select
@@ -176,13 +156,10 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                     クライアント名
                   </th>
                   <th className="text-left font-medium px-4 py-3">URL</th>
-                  <th className="text-left font-medium px-4 py-3">テンプレート設置</th>
                   <th className="text-left font-medium px-4 py-3">解約</th>
-                  <th className="text-left font-medium px-4 py-3">クリエイティブ</th>
                   <th className="text-left font-medium px-4 py-3">マーケ</th>
-                  <th className="text-left font-medium px-4 py-3">システム納品</th>
-                  <th className="text-left font-medium px-4 py-3">旧SATTOUユーザ</th>
-                  <th className="text-left font-medium px-4 py-3">以降 (旧)</th>
+                  <th className="text-right font-medium px-4 py-3">システム納品</th>
+                  <th className="text-center font-medium px-4 py-3">旧SATTOUユーザ</th>
                   <th className="text-left font-medium px-4 py-3">HPB連携</th>
                   <th className="text-left font-medium px-4 py-3">識別子</th>
                   <th className="text-left font-medium px-4 py-3">初期記入シート</th>
@@ -190,7 +167,10 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((r, idx) => (
-                  <tr key={`${r.identifier || r.clientName}-${r.order}-${idx}`} className="hover:bg-slate-50">
+                  <tr
+                    key={`${r.identifier || r.clientName}-${r.order}-${idx}`}
+                    className="hover:bg-slate-50"
+                  >
                     <td className="px-3 py-3 text-right tabular-nums text-slate-500">{r.order}</td>
                     <td className="px-4 py-3 sticky left-0 bg-white z-10">
                       {r.clientId ? (
@@ -202,9 +182,6 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                         </Link>
                       ) : (
                         <span className="font-medium">{r.clientName}</span>
-                      )}
-                      {r.brand && (
-                        <div className="text-xs text-slate-500 mt-0.5">{r.brand}</div>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -224,42 +201,29 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`pill ${
-                          r.templateInstalled === "済"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {r.templateInstalled}
-                      </span>
+                      {r.cancelled === "解約" ? (
+                        <span className="pill bg-rose-50 text-rose-700">解約</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{r.marketer || "—"}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {r.systemDelivery || <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {r.legacyUser ? (
+                        <Check className="w-4 h-4 text-emerald-600 inline" />
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`pill ${
-                          r.cancelled === "解約"
-                            ? "bg-rose-50 text-rose-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {r.cancelled}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-700">{r.creative}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{r.marketer}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{r.systemDelivery}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{r.legacyUser}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{r.since || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`pill ${
-                          r.hpbLinked === "連携"
-                            ? "bg-sky-50 text-sky-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {r.hpbLinked}
-                      </span>
+                      {r.hpbLinked && r.hpbLinked !== "—" ? (
+                        <span className="pill bg-sky-50 text-sky-700">{r.hpbLinked}</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.identifier || "—"}</td>
                     <td className="px-4 py-3">
