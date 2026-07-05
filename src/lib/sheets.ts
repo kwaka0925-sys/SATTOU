@@ -15,6 +15,11 @@ export type SheetRow = {
   note?: string;
   subscriptionStatus?: string;
   marketer?: string;
+  otherAdSpendUrl?: string;
+  adSpend?: number | string;
+  minAmount?: number | string;
+  operationFeeExTax?: number | string;
+  operationFeeIncTax?: number | string;
 };
 
 export type DashboardTotals = {
@@ -34,6 +39,11 @@ export type SheetInvoice = Omit<Invoice, "clientId"> & {
   storeCount?: number;
   progress?: string;
   bankTransferProgress?: string;
+  otherAdSpendUrl?: string;
+  adSpend?: number;
+  minAmount?: number;
+  operationFeeExTax?: number;
+  operationFeeIncTax?: number;
 };
 
 const REVALIDATE_SECONDS = 60;
@@ -123,6 +133,10 @@ export function rowToInvoice(row: SheetRow, month: string): SheetInvoice {
   const clientId = resolveClientId(row.salonName);
   const brandCount = parseAmount(row.brandCount) || undefined;
   const storeCount = parseAmount(row.storeCount) || undefined;
+  const adSpend = parseAmount(row.adSpend) || undefined;
+  const minAmount = parseAmount(row.minAmount) || undefined;
+  const operationFeeExTax = parseAmount(row.operationFeeExTax) || undefined;
+  const operationFeeIncTax = parseAmount(row.operationFeeIncTax) || undefined;
 
   return {
     id,
@@ -149,6 +163,11 @@ export function rowToInvoice(row: SheetRow, month: string): SheetInvoice {
     storeCount,
     progress: row.progress || undefined,
     bankTransferProgress: row.bankTransferProgress || undefined,
+    otherAdSpendUrl: row.otherAdSpendUrl || undefined,
+    adSpend,
+    minAmount,
+    operationFeeExTax,
+    operationFeeIncTax,
   };
 }
 

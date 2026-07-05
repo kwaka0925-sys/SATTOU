@@ -19,6 +19,14 @@
  *   O: メモ               → note
  *   P: 継続ステータス     → subscriptionStatus
  *   Q: マーケティング担当 → marketer
+ *   R: 別の広告費URL     → otherAdSpendUrl (広告費関連ドキュメントへのリンク)
+ *   S: 広告費             → adSpend        (クライアントが実際に消化した広告費)
+ *   T: 下限額             → minAmount      (最低運用代行費など任意の閾値)
+ *   U: 運用代行(税抜)     → operationFeeExTax
+ *   V: 運用代行(税込)     → operationFeeIncTax
+ *
+ * 各セルには数式を書いても getValues() が計算結果を返すため、そのまま
+ * ダッシュボードに反映されます (例: U列に =S3*0.2 と書けば税抜運用代行費 = 広告費の20% を計算)。
  *
  * セットアップ:
  *   1. 対象スプレッドシートで「拡張機能 → Apps Script」を開く
@@ -60,6 +68,11 @@ const COLUMN_INDEX = {
   note: 15,                // O
   subscriptionStatus: 16,  // P
   marketer: 17,            // Q
+  otherAdSpendUrl: 18,     // R
+  adSpend: 19,             // S
+  minAmount: 20,           // T
+  operationFeeExTax: 21,   // U
+  operationFeeIncTax: 22,  // V
 };
 
 function MONTH_TAB_PATTERNS(month) {
@@ -136,6 +149,11 @@ function readRows_(sheet) {
       note: stringAt_(row, COLUMN_INDEX.note),
       subscriptionStatus: stringAt_(row, COLUMN_INDEX.subscriptionStatus),
       marketer: stringAt_(row, COLUMN_INDEX.marketer),
+      otherAdSpendUrl: stringAt_(row, COLUMN_INDEX.otherAdSpendUrl),
+      adSpend: numberAt_(row, COLUMN_INDEX.adSpend),
+      minAmount: numberAt_(row, COLUMN_INDEX.minAmount),
+      operationFeeExTax: numberAt_(row, COLUMN_INDEX.operationFeeExTax),
+      operationFeeIncTax: numberAt_(row, COLUMN_INDEX.operationFeeIncTax),
     });
   });
   return out;
