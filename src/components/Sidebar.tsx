@@ -9,14 +9,56 @@ import {
   FileText,
   Settings,
   CircleDot,
+  BarChart3,
+  Upload,
+  type LucideIcon,
 } from "lucide-react";
 
-const NAV = [
-  { href: "/", label: "ダッシュボード", icon: LayoutDashboard },
-  { href: "/clients", label: "クライアント", icon: Users },
-  { href: "/rankings", label: "ランキング・比較", icon: Trophy },
-  { href: "/invoices", label: "請求書", icon: FileText },
-  { href: "/settings", label: "設定", icon: Settings },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+};
+
+type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "経営",
+    items: [
+      { href: "/", label: "ダッシュボード", icon: LayoutDashboard, exact: true },
+      { href: "/rankings", label: "ランキング・比較", icon: Trophy },
+    ],
+  },
+  {
+    title: "クライアント",
+    items: [
+      { href: "/clients", label: "クライアント一覧", icon: Users },
+    ],
+  },
+  {
+    title: "広告分析",
+    items: [
+      { href: "/ads", label: "広告分析", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "請求",
+    items: [
+      { href: "/invoices", label: "請求書", icon: FileText, exact: true },
+      { href: "/invoices/import", label: "取り込み", icon: Upload },
+    ],
+  },
+  {
+    title: "システム",
+    items: [
+      { href: "/settings", label: "設定", icon: Settings },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -34,26 +76,37 @@ export default function Sidebar() {
           </div>
         </Link>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
-        {NAV.map((n) => {
-          const active =
-            n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
-          const Icon = n.icon;
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-brand-50 text-brand-700 font-medium"
-                  : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {n.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 p-3 space-y-4">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.title}>
+            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {section.title}
+            </div>
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const active = item.exact
+                  ? pathname === item.href
+                  : pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      active
+                        ? "bg-brand-50 text-brand-700 font-medium"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
       <div className="px-4 py-4 border-t border-slate-200 text-xs text-slate-500">
         <div className="flex items-center gap-2">
