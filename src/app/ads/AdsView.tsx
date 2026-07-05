@@ -61,11 +61,16 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
         subtitle={`${monthLabel(month)}分 · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
       />
       <div className="p-6 space-y-4">
-        {isMock && (
+        {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
-            {configured
-              ? `${monthLabel(month)}分のシートにデータが見つからなかったため、モックデータで表示中。`
-              : "モックデータで表示中。SHEETS_GAS_URL と SHEETS_GAS_TOKEN を Vercel の環境変数に登録すると、請求書シートの実データ（列R〜V）に切り替わります。シート側では該当セルに数式を書けば計算結果がそのまま反映されます。"}
+            GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
+            <code className="font-mono"> SHEETS_GAS_TOKEN </code>
+            を Vercel の環境変数に登録すると、シート列R〜V（広告費・下限額・運用代行税抜/税込）が反映されます。数式もそのまま計算結果として表示されます。
+          </div>
+        )}
+        {configured && rows.length === 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+            {monthLabel(month)}分のデータがシートに見つかりませんでした。
           </div>
         )}
 

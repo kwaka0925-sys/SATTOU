@@ -101,6 +101,14 @@ export default function RankingsPage() {
         subtitle="クライアント間のパフォーマンスを業種・指標で比較"
       />
       <div className="p-6 space-y-6">
+        {CLIENTS.length === 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm px-5 py-4">
+            <div className="font-medium mb-1">実データを接続してください</div>
+            <div className="text-xs leading-relaxed">
+              このランキング画面は個別クライアントの広告・予約データを必要とします。GAS連携を設定してシートの実データを取り込むか、クライアント別データの供給元を確定するとランキングが表示されます。
+            </div>
+          </div>
+        )}
         <div className="card p-4 flex flex-wrap items-center gap-3">
           <div className="text-sm text-slate-500">指標</div>
           <select value={metric} onChange={(e) => setMetric(e.target.value as Metric)} className="input w-auto">

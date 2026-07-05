@@ -66,7 +66,7 @@ export default function StoresView({ rows }: Props) {
       />
       <div className="p-6 space-y-4">
         <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
-          モックデータで表示中。この画面用のシートタブが確定したら、GAS 連携で列マッピングを設定して実データに切り替えできます。
+          この画面は sattou 導入店舗管理シートを表示する予定です。対象タブ名と列マッピングが確定次第、GAS 連携で実データに切り替えられます。
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -17,20 +17,7 @@ const PREFECTURES = [
   "東京都", "神奈川県", "埼玉県", "千葉県", "大阪府", "京都府", "兵庫県", "愛知県", "福岡県", "北海道",
   "宮城県", "広島県", "静岡県", "新潟県", "岡山県",
 ];
-const BRANDS = [
-  "モアリジャパン",
-  "Rasysa Group",
-  "Wabi&Co",
-  "Lien Holdings",
-  "青葉ヘルスケア",
-  "ヒーリング・パートナーズ",
-  "せせらぎメディカル",
-  "Comfy Beauty",
-  "凛ウェルネス",
-  "nuance Salon Group",
-  "ハレ・コーポレーション",
-  "ふれあいメディカル",
-];
+const BRANDS: string[] = [];
 const REPS_FIRST = ["健", "理沙", "翔太", "由美", "拓海", "綾", "亮", "美咲", "雄一", "彩", "大輔", "麻衣", "和也", "桃子", "悠斗"];
 const REPS_LAST = ["山田", "佐藤", "鈴木", "高橋", "田中", "伊藤", "中村", "小林", "加藤", "渡辺", "吉田", "山本", "斎藤", "松本", "井上"];
 
@@ -161,7 +148,9 @@ function buildClient(i: number): Client {
   };
 }
 
-export const CLIENTS: Client[] = Array.from({ length: 64 }, (_, i) => buildClient(i));
+// Cleared while migrating to live Google Sheets data.
+// buildClient() / BRANDS remain available if a demo dataset is needed again.
+export const CLIENTS: Client[] = [];
 
 export function getClient(id: string): Client | undefined {
   return CLIENTS.find((c) => c.id === id);

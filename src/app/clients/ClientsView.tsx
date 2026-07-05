@@ -83,11 +83,17 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
         subtitle={`${monthLabel(month)}分 · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
       <div className="p-6 space-y-4">
-        {isMock && (
+        {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
-            {configured
-              ? `${monthLabel(month)}分のシートにデータが見つからなかったため、モックデータで表示中。`
-              : "モックデータで表示中。SHEETS_GAS_URL と SHEETS_GAS_TOKEN を Vercel の環境変数に登録すると、請求書シートの実データに切り替わります。"}
+            GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
+            <code className="font-mono"> SHEETS_GAS_TOKEN </code>
+            を Vercel の環境変数に登録すると、請求書シートの実データがこの画面に反映されます。
+          </div>
+        )}
+        {configured && rows.length === 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+            {monthLabel(month)}分のデータがシートに見つかりませんでした。
+            <code className="font-mono">?month=YYYY-MM</code> で別の月を指定できます。
           </div>
         )}
 
