@@ -15,6 +15,7 @@ import {
   Store,
   Sparkles,
   KeyRound,
+  FileSpreadsheet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -79,6 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: "システム",
     items: [
       { href: "/login-manager", label: "ログイン管理", icon: KeyRound },
+      { href: "/admin-sheets", label: "管理系シート", icon: FileSpreadsheet },
       { href: "/settings", label: "設定", icon: Settings },
     ],
   },
