@@ -11,6 +11,7 @@ import {
   BarChart3,
   Upload,
   Building2,
+  UserX,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,12 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/invoices", label: "請求書", icon: FileText, exact: true },
       { href: "/invoices/import", label: "取り込み", icon: Upload },
+    ],
+  },
+  {
+    title: "解約",
+    items: [
+      { href: "/cancellations", label: "解約一覧", icon: UserX },
     ],
   },
   {

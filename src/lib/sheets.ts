@@ -248,6 +248,58 @@ export async function fetchInvoicesFromSheet(
   }
 }
 
+// Sheet names that legitimately map to a specific month. Excludes generic
+// fallback names (like "請求管理") so we can tell when the GAS returned
+// the active sheet as a fallback for a month whose tab doesn't exist.
+function strictSheetPatternsForMonth(month: string): string[] {
+  const [y, m] = month.split("-");
+  const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
+  return [
+    month,
+    `${y}年${mNum}月_請求管理`,
+    `${y}年${mNum}月`,
+    `${y}年請求書${mNum}月`,
+    `${y}年請求書${mNum}月（${opMonth}月稼働）`,
+    `${y}年請求書${mNum}月(${opMonth}月稼働)`,
+  ];
+}
+
+// Fetch a specific month's invoices, returning [] when GAS falls back to an
+// unrelated sheet (i.e. the requested tab doesn't exist). Used by
+// multi-month aggregation views like /cancellations.
+export async function fetchInvoicesForMonthStrict(
+  month: string,
+): Promise<SheetInvoice[]> {
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return [];
+
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
+  url.searchParams.set("month", month);
+
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      rows?: SheetRow[];
+      sheet?: string;
+      error?: string;
+    };
+    if (data.error) return [];
+    const expected = strictSheetPatternsForMonth(month);
+    if (!data.sheet || !expected.includes(data.sheet)) return [];
+    return (data.rows ?? [])
+      .filter((r) => r.salonName && r.salonName.trim())
+      .map((r) => rowToInvoice(r, month));
+  } catch (err) {
+    console.warn("[sheets] strict fetch failed", err);
+    return [];
+  }
+}
+
 export async function fetchDashboardTotals(
   month: string = currentMonth(),
 ): Promise<DashboardTotals> {
