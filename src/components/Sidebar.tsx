@@ -58,16 +58,14 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/clients", label: "請求書一覧", icon: FileText },
       {
-        href: "https://docs.google.com/spreadsheets/d/1rG1hSpd_Z7VKOCMfwhPik-QTH1e3ynD4mX6y0mqQeSw/edit?gid=1844006118#gid=1844006118",
+        href: "/invoicing-sheet",
         label: "請求書作成用スプシ",
         icon: FileSpreadsheet,
-        external: true,
       },
       {
-        href: "https://docs.google.com/spreadsheets/d/1esBZyZCjuZe4cb0-5--oBMEGdcfQ4coU3KsIz6bOuNI/edit?gid=755722710#gid=755722710",
+        href: "/bank-transfer-sheet",
         label: "口座振替用スプシ",
         icon: Landmark,
-        external: true,
       },
     ],
   },
