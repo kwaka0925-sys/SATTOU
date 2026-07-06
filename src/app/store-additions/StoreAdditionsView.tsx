@@ -308,10 +308,10 @@ export default function StoreAdditionsView({ year }: Props) {
                 <select
                   value={joinType}
                   onChange={(e) => setJoinType(e.target.value as JoinType)}
-                  className="input"
+                  className={`input font-medium ${JOIN_TYPE_STYLE[joinType]}`}
                 >
                   {JOIN_TYPES.map((t) => (
-                    <option key={t} value={t}>
+                    <option key={t} value={t} className="bg-white text-slate-900">
                       {t}
                     </option>
                   ))}
@@ -324,10 +324,18 @@ export default function StoreAdditionsView({ year }: Props) {
                 <select
                   value={hpb}
                   onChange={(e) => setHpb(e.target.value as HPBValue)}
-                  className="input"
+                  className={`input font-medium ${
+                    hpb === "あり"
+                      ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
                 >
-                  <option value="なし">なし</option>
-                  <option value="あり">あり</option>
+                  <option value="なし" className="bg-white text-slate-900">
+                    なし
+                  </option>
+                  <option value="あり" className="bg-white text-slate-900">
+                    あり
+                  </option>
                 </select>
               </div>
             </div>
