@@ -6,17 +6,41 @@ import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
 import { Filter, Search } from "lucide-react";
-import type { Invoice, InvoicePaymentMethod } from "@/lib/types";
+import type { InvoicePaymentMethod } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
 
-const STATUS_LABEL: Record<Invoice["status"], { label: string; cls: string }> = {
-  paid: { label: "入金済", cls: "bg-emerald-50 text-emerald-700" },
-  unpaid: { label: "未入金", cls: "bg-amber-50 text-amber-700" },
-  overdue: { label: "期限超過", cls: "bg-rose-50 text-rose-700" },
-  draft: { label: "下書き", cls: "bg-slate-100 text-slate-600" },
+const PROGRESS_VALUES = [
+  "未発行",
+  "発行済み",
+  "送付済み",
+  "入金確認済み",
+  "入金未確認",
+  "請求なし",
+  "未払い",
+  "金額が違う",
+] as const;
+
+type ProgressValue = "" | (typeof PROGRESS_VALUES)[number];
+
+const PROGRESS_STYLE: Record<(typeof PROGRESS_VALUES)[number], string> = {
+  未発行: "bg-slate-100 text-slate-600 border-slate-200",
+  発行済み: "bg-sky-50 text-sky-700 border-sky-200",
+  送付済み: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  入金確認済み: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  入金未確認: "bg-amber-50 text-amber-800 border-amber-200",
+  請求なし: "bg-slate-100 text-slate-500 border-slate-200",
+  未払い: "bg-orange-50 text-orange-700 border-orange-200",
+  金額が違う: "bg-rose-100 text-rose-800 border-rose-300",
 };
 
-const STATUS_KEYS: Invoice["status"][] = ["paid", "unpaid", "overdue", "draft"];
+function progressCls(v: ProgressValue): string {
+  if (!v) return "bg-white text-slate-500 border-slate-200";
+  return PROGRESS_STYLE[v];
+}
+
+function isProgressValue(v: string): v is ProgressValue {
+  return v === "" || (PROGRESS_VALUES as readonly string[]).includes(v);
+}
 
 const SUBSCRIPTION_OPTIONS = [
   "継続",
@@ -31,7 +55,7 @@ const OVERRIDES_STORAGE_KEY = "sattou-invoice-overrides";
 
 type EditableField =
   | "paymentMethod"
-  | "status"
+  | "progress"
   | "subscriptionStatus"
   | "marketer"
   | "note";
@@ -40,7 +64,7 @@ type RowOverride = Partial<Record<EditableField, string>>;
 type OverridesMap = Record<string, RowOverride>;
 
 type PmFilter = "all" | InvoicePaymentMethod;
-type StatusFilter = "all" | Invoice["status"];
+type ProgressFilter = "all" | ProgressValue;
 
 type Props = {
   rows: SheetInvoice[];
@@ -54,14 +78,10 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
-function isStatus(v: string): v is Invoice["status"] {
-  return (STATUS_KEYS as string[]).includes(v);
-}
-
 export default function ClientsView({ rows, month, configured, isMock }: Props) {
   const [q, setQ] = useState("");
   const [pm, setPm] = useState<PmFilter>("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
   const [overrides, setOverrides] = useState<OverridesMap>({});
 
@@ -122,11 +142,17 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
     [overrides],
   );
 
-  const effectiveStatus = useCallback(
-    (r: SheetInvoice): Invoice["status"] => {
-      const override = overrides[r.id]?.status;
-      if (override && isStatus(override)) return override;
-      return r.status;
+  // Progress source of truth for each row:
+  //   1. User override (localStorage)
+  //   2. Sheet H column value if it is exactly "入金確認済み"
+  //   3. Empty (all other cases default to blank)
+  const effectiveProgress = useCallback(
+    (r: SheetInvoice): ProgressValue => {
+      const override = overrides[r.id]?.progress;
+      if (override && isProgressValue(override)) return override;
+      const sheetProgress = (r.progress ?? "").trim();
+      if (sheetProgress === "入金確認済み") return "入金確認済み";
+      return "";
     },
     [overrides],
   );
@@ -179,10 +205,10 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       const rowPm = effectivePaymentMethod(r);
-      const rowStatus = effectiveStatus(r);
+      const rowProgress = effectiveProgress(r);
       const rowMarketer = effectiveMarketer(r);
       if (pm !== "all" && rowPm !== pm) return false;
-      if (status !== "all" && rowStatus !== status) return false;
+      if (progressFilter !== "all" && rowProgress !== progressFilter) return false;
       if (marketer !== "all" && rowMarketer !== marketer) return false;
       if (q) {
         const qq = q.toLowerCase();
@@ -200,24 +226,24 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
   }, [
     rows,
     pm,
-    status,
+    progressFilter,
     marketer,
     q,
     effectivePaymentMethod,
-    effectiveStatus,
+    effectiveProgress,
     effectiveMarketer,
   ]);
 
   const totals = filtered.reduce(
     (acc, r) => {
-      const rowStatus = effectiveStatus(r);
+      const rowProgress = effectiveProgress(r);
+      const isPaid = rowProgress === "入金確認済み";
+      const isNoBill = rowProgress === "請求なし";
       return {
         brand: acc.brand + (r.brandCount ?? 0),
         store: acc.store + (r.storeCount ?? 0),
         amount: acc.amount + r.amount,
-        unpaid:
-          acc.unpaid +
-          (rowStatus === "unpaid" || rowStatus === "overdue" ? r.amount : 0),
+        unpaid: acc.unpaid + (!isPaid && !isNoBill ? r.amount : 0),
       };
     },
     { brand: 0, store: 0, amount: 0, unpaid: 0 },
@@ -295,15 +321,17 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
             <option value="請求書">請求書</option>
           </select>
           <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as StatusFilter)}
+            value={progressFilter}
+            onChange={(e) => setProgressFilter(e.target.value as ProgressFilter)}
             className="input w-auto"
           >
-            <option value="all">進捗すべて</option>
-            <option value="paid">入金済</option>
-            <option value="unpaid">未入金</option>
-            <option value="overdue">期限超過</option>
-            <option value="draft">下書き</option>
+            <option value="all">進捗確認すべて</option>
+            <option value="">(未設定)</option>
+            {PROGRESS_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
           </select>
           {marketers.length > 0 && (
             <select
@@ -335,7 +363,7 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
                   <th className="text-left font-medium px-4 py-3">加入者識別番号</th>
                   <th className="text-left font-medium px-4 py-3">振込名</th>
                   <th className="text-right font-medium px-4 py-3">請求金額 (税込)</th>
-                  <th className="text-left font-medium px-4 py-3">進捗</th>
+                  <th className="text-left font-medium px-4 py-3">進捗確認</th>
                   <th className="text-left font-medium px-4 py-3">口座振替進捗</th>
                   <th className="text-left font-medium px-4 py-3">継続</th>
                   <th className="text-left font-medium px-4 py-3">担当</th>
@@ -345,11 +373,10 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((r) => {
                   const rowPm = effectivePaymentMethod(r);
-                  const rowStatus = effectiveStatus(r);
+                  const rowProgress = effectiveProgress(r);
                   const rowSub = effectiveSubscription(r);
                   const rowMarketer = effectiveMarketer(r);
                   const rowNote = effectiveNote(r);
-                  const st = STATUS_LABEL[rowStatus];
                   const pmCls =
                     rowPm === "振替"
                       ? "bg-rose-50 text-rose-700 border-rose-200"
@@ -398,15 +425,16 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
                       </td>
                       <td className="px-4 py-3">
                         <select
-                          value={rowStatus}
+                          value={rowProgress}
                           onChange={(e) =>
-                            updateOverride(r.id, "status", e.target.value)
+                            updateOverride(r.id, "progress", e.target.value)
                           }
-                          className={`text-xs rounded-md border border-transparent px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${st.cls}`}
+                          className={`text-xs rounded-md border px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${progressCls(rowProgress)}`}
                         >
-                          {STATUS_KEYS.map((k) => (
-                            <option key={k} value={k}>
-                              {STATUS_LABEL[k].label}
+                          <option value="">—</option>
+                          {PROGRESS_VALUES.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
                             </option>
                           ))}
                         </select>
