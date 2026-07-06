@@ -16,6 +16,8 @@ import {
   Sparkles,
   KeyRound,
   FileSpreadsheet,
+  Landmark,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +26,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   exact?: boolean;
+  external?: boolean;
 };
 
 type NavSection = {
@@ -54,6 +57,18 @@ const NAV_SECTIONS: NavSection[] = [
     title: "請求",
     items: [
       { href: "/clients", label: "請求書一覧", icon: FileText },
+      {
+        href: "https://docs.google.com/spreadsheets/d/1rG1hSpd_Z7VKOCMfwhPik-QTH1e3ynD4mX6y0mqQeSw/edit?gid=1844006118#gid=1844006118",
+        label: "請求書作成用スプシ",
+        icon: FileSpreadsheet,
+        external: true,
+      },
+      {
+        href: "https://docs.google.com/spreadsheets/d/1esBZyZCjuZe4cb0-5--oBMEGdcfQ4coU3KsIz6bOuNI/edit?gid=755722710#gid=755722710",
+        label: "口座振替用スプシ",
+        icon: Landmark,
+        external: true,
+      },
     ],
   },
   {
@@ -109,11 +124,26 @@ export default function Sidebar() {
             </div>
             <div className="space-y-1">
               {section.items.map((item) => {
+                const Icon = item.icon;
+                if (item.external) {
+                  return (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors group"
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-slate-500 shrink-0" />
+                    </a>
+                  );
+                }
                 const active = item.exact
                   ? pathname === item.href
                   : pathname === item.href ||
                     pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
