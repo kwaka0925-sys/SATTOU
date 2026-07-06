@@ -31,6 +31,7 @@ export type DashboardTotals = {
   customerCount: number;
   brandCount: number;
   storeCount: number;
+  operationFeeIncTax: number;
 };
 
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
@@ -310,6 +311,7 @@ export async function fetchDashboardTotals(
     customerCount: 0,
     brandCount: 0,
     storeCount: 0,
+    operationFeeIncTax: 0,
   };
   const cfg = backendConfig("billing");
   if (!cfg.url || !cfg.token) return empty;
@@ -346,6 +348,10 @@ export async function fetchDashboardTotals(
       customerCount: rows.length,
       brandCount: rows.reduce((s, r) => s + parseAmount(r.brandCount), 0),
       storeCount: rows.reduce((s, r) => s + parseAmount(r.storeCount), 0),
+      operationFeeIncTax: rows.reduce(
+        (s, r) => s + parseAmount(r.operationFeeIncTax),
+        0,
+      ),
     };
   } catch (err) {
     console.warn("[sheets] fetch failed", err);
