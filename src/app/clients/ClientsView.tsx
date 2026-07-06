@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
@@ -15,6 +15,29 @@ const STATUS_LABEL: Record<Invoice["status"], { label: string; cls: string }> = 
   overdue: { label: "期限超過", cls: "bg-rose-50 text-rose-700" },
   draft: { label: "下書き", cls: "bg-slate-100 text-slate-600" },
 };
+
+const STATUS_KEYS: Invoice["status"][] = ["paid", "unpaid", "overdue", "draft"];
+
+const SUBSCRIPTION_OPTIONS = [
+  "継続",
+  "解約",
+  "システムのみ",
+  "システム＋マーケ",
+  "マーケのみ",
+  "トライアル",
+];
+
+const OVERRIDES_STORAGE_KEY = "sattou-invoice-overrides";
+
+type EditableField =
+  | "paymentMethod"
+  | "status"
+  | "subscriptionStatus"
+  | "marketer"
+  | "note";
+
+type RowOverride = Partial<Record<EditableField, string>>;
+type OverridesMap = Record<string, RowOverride>;
 
 type PmFilter = "all" | InvoicePaymentMethod;
 type StatusFilter = "all" | Invoice["status"];
@@ -31,25 +54,136 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+function isStatus(v: string): v is Invoice["status"] {
+  return (STATUS_KEYS as string[]).includes(v);
+}
+
 export default function ClientsView({ rows, month, configured, isMock }: Props) {
   const [q, setQ] = useState("");
   const [pm, setPm] = useState<PmFilter>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
+  const [overrides, setOverrides] = useState<OverridesMap>({});
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(OVERRIDES_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          setOverrides(parsed);
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  const persistOverrides = useCallback((next: OverridesMap) => {
+    try {
+      window.localStorage.setItem(
+        OVERRIDES_STORAGE_KEY,
+        JSON.stringify(next),
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }, []);
+
+  const updateOverride = useCallback(
+    (id: string, field: EditableField, value: string) => {
+      setOverrides((prev) => {
+        const rowPrev = prev[id] ?? {};
+        const rowNext: RowOverride = { ...rowPrev };
+        if (value === "") {
+          delete rowNext[field];
+        } else {
+          rowNext[field] = value;
+        }
+        const next: OverridesMap = { ...prev };
+        if (Object.keys(rowNext).length === 0) {
+          delete next[id];
+        } else {
+          next[id] = rowNext;
+        }
+        persistOverrides(next);
+        return next;
+      });
+    },
+    [persistOverrides],
+  );
+
+  const effectivePaymentMethod = useCallback(
+    (r: SheetInvoice): string => {
+      const override = overrides[r.id]?.paymentMethod;
+      if (override !== undefined) return override;
+      return r.paymentMethod ?? "";
+    },
+    [overrides],
+  );
+
+  const effectiveStatus = useCallback(
+    (r: SheetInvoice): Invoice["status"] => {
+      const override = overrides[r.id]?.status;
+      if (override && isStatus(override)) return override;
+      return r.status;
+    },
+    [overrides],
+  );
+
+  const effectiveSubscription = useCallback(
+    (r: SheetInvoice): string => {
+      const override = overrides[r.id]?.subscriptionStatus;
+      if (override !== undefined) return override;
+      return r.subscriptionStatus ?? "";
+    },
+    [overrides],
+  );
+
+  const effectiveMarketer = useCallback(
+    (r: SheetInvoice): string => {
+      const override = overrides[r.id]?.marketer;
+      if (override !== undefined) return override;
+      return r.marketer ?? "";
+    },
+    [overrides],
+  );
+
+  const effectiveNote = useCallback(
+    (r: SheetInvoice): string => {
+      const override = overrides[r.id]?.note;
+      if (override !== undefined) return override;
+      return r.note ?? "";
+    },
+    [overrides],
+  );
 
   const marketers = useMemo(() => {
     const set = new Set<string>();
     rows.forEach((r) => {
-      if (r.marketer) set.add(r.marketer);
+      const m = effectiveMarketer(r);
+      if (m) set.add(m);
     });
     return Array.from(set).sort();
-  }, [rows]);
+  }, [rows, effectiveMarketer]);
+
+  const subscriptionOptions = useMemo(() => {
+    const set = new Set<string>(SUBSCRIPTION_OPTIONS);
+    rows.forEach((r) => {
+      const v = effectiveSubscription(r);
+      if (v) set.add(v);
+    });
+    return Array.from(set);
+  }, [rows, effectiveSubscription]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (pm !== "all" && r.paymentMethod !== pm) return false;
-      if (status !== "all" && r.status !== status) return false;
-      if (marketer !== "all" && r.marketer !== marketer) return false;
+      const rowPm = effectivePaymentMethod(r);
+      const rowStatus = effectiveStatus(r);
+      const rowMarketer = effectiveMarketer(r);
+      if (pm !== "all" && rowPm !== pm) return false;
+      if (status !== "all" && rowStatus !== status) return false;
+      if (marketer !== "all" && rowMarketer !== marketer) return false;
       if (q) {
         const qq = q.toLowerCase();
         const hay = [
@@ -63,17 +197,29 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
       }
       return true;
     });
-  }, [rows, pm, status, marketer, q]);
+  }, [
+    rows,
+    pm,
+    status,
+    marketer,
+    q,
+    effectivePaymentMethod,
+    effectiveStatus,
+    effectiveMarketer,
+  ]);
 
   const totals = filtered.reduce(
-    (acc, r) => ({
-      brand: acc.brand + (r.brandCount ?? 0),
-      store: acc.store + (r.storeCount ?? 0),
-      amount: acc.amount + r.amount,
-      unpaid:
-        acc.unpaid +
-        (r.status === "unpaid" || r.status === "overdue" ? r.amount : 0),
-    }),
+    (acc, r) => {
+      const rowStatus = effectiveStatus(r);
+      return {
+        brand: acc.brand + (r.brandCount ?? 0),
+        store: acc.store + (r.storeCount ?? 0),
+        amount: acc.amount + r.amount,
+        unpaid:
+          acc.unpaid +
+          (rowStatus === "unpaid" || rowStatus === "overdue" ? r.amount : 0),
+      };
+    },
     { brand: 0, store: 0, amount: 0, unpaid: 0 },
   );
 
@@ -198,7 +344,18 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((r) => {
-                  const st = STATUS_LABEL[r.status];
+                  const rowPm = effectivePaymentMethod(r);
+                  const rowStatus = effectiveStatus(r);
+                  const rowSub = effectiveSubscription(r);
+                  const rowMarketer = effectiveMarketer(r);
+                  const rowNote = effectiveNote(r);
+                  const st = STATUS_LABEL[rowStatus];
+                  const pmCls =
+                    rowPm === "振替"
+                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                      : rowPm === "請求書"
+                      ? "bg-sky-50 text-sky-700 border-sky-200"
+                      : "bg-white text-slate-500 border-slate-200";
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 sticky left-0 bg-white z-10">
@@ -220,19 +377,17 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
                         {r.storeCount ?? "—"}
                       </td>
                       <td className="px-4 py-3">
-                        {r.paymentMethod ? (
-                          <span
-                            className={`pill ${
-                              r.paymentMethod === "振替"
-                                ? "bg-rose-50 text-rose-700"
-                                : "bg-sky-50 text-sky-700"
-                            }`}
-                          >
-                            {r.paymentMethod === "振替" ? "口座振替" : "請求書"}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
+                        <select
+                          value={rowPm}
+                          onChange={(e) =>
+                            updateOverride(r.id, "paymentMethod", e.target.value)
+                          }
+                          className={`text-xs rounded-md border px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${pmCls}`}
+                        >
+                          <option value="">—</option>
+                          <option value="振替">口座振替</option>
+                          <option value="請求書">請求書</option>
+                        </select>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {r.subscriberId ?? "—"}
@@ -242,22 +397,73 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
                         {yen(r.amount)}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`pill ${st.cls}`}>{st.label}</span>
+                        <select
+                          value={rowStatus}
+                          onChange={(e) =>
+                            updateOverride(r.id, "status", e.target.value)
+                          }
+                          className={`text-xs rounded-md border border-transparent px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${st.cls}`}
+                        >
+                          {STATUS_KEYS.map((k) => (
+                            <option key={k} value={k}>
+                              {STATUS_LABEL[k].label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {r.bankTransferProgress ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">
-                        {r.subscriptionStatus ?? "—"}
+                      <td className="px-4 py-3">
+                        <select
+                          value={rowSub}
+                          onChange={(e) =>
+                            updateOverride(
+                              r.id,
+                              "subscriptionStatus",
+                              e.target.value,
+                            )
+                          }
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        >
+                          <option value="">—</option>
+                          {subscriptionOptions.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">
-                        {r.marketer ?? "—"}
+                      <td className="px-4 py-3">
+                        <select
+                          value={rowMarketer}
+                          onChange={(e) =>
+                            updateOverride(r.id, "marketer", e.target.value)
+                          }
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        >
+                          <option value="">—</option>
+                          {marketers.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                          {rowMarketer &&
+                            !marketers.includes(rowMarketer) && (
+                              <option value={rowMarketer}>{rowMarketer}</option>
+                            )}
+                        </select>
                       </td>
-                      <td
-                        className="px-4 py-3 text-xs text-slate-500 max-w-[200px] truncate"
-                        title={r.note}
-                      >
-                        {r.note ?? "—"}
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={rowNote}
+                          onChange={(e) =>
+                            updateOverride(r.id, "note", e.target.value)
+                          }
+                          placeholder="メモを入力"
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        />
                       </td>
                     </tr>
                   );
