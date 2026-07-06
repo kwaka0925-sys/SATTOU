@@ -39,12 +39,15 @@ export default async function Page({
 
   const revenueIncTax = sheetTotals.revenue;
   const revenueExTax = Math.round(revenueIncTax / 1.1);
-  // システム売上 = 総売上 − 広告運用代行費（税込ベースで差し引いてから税抜換算）
-  const systemRevenueIncTax = Math.max(
-    revenueIncTax - sheetTotals.operationFeeIncTax,
-    0,
-  );
-  const systemRevenueExTax = Math.round(systemRevenueIncTax / 1.1);
+  const opFeeIncTax = sheetTotals.operationFeeIncTax;
+  // 税抜きの運用代行費はシートに列がある場合はその値を優先、無ければ税込 ÷ 1.1
+  const opFeeExTax =
+    sheetTotals.operationFeeExTax > 0
+      ? sheetTotals.operationFeeExTax
+      : Math.round(opFeeIncTax / 1.1);
+  // システム売上 = 総売上 − 広告運用代行費 (税抜・税込それぞれで独立に計算)
+  const systemRevenueIncTax = Math.max(revenueIncTax - opFeeIncTax, 0);
+  const systemRevenueExTax = Math.max(revenueExTax - opFeeExTax, 0);
   const dataHint = hasData
     ? `${monthLabel(month)}分 · 請求書シート集計`
     : "実データ接続待ち";
@@ -66,7 +69,7 @@ export default async function Page({
           <MonthPicker current={month} />
         </div>
 
-        {/* Row 1: 総売上（税抜き / 税込み） */}
+        {/* Row 1: 総売上（税抜き / 税込み） — 最上位KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <StatCard
             size="sm"
@@ -84,26 +87,41 @@ export default async function Page({
           />
         </div>
 
-        {/* Row 2: システム売上（税抜き / 税込み）と 広告運用代行費 */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Row 2 内訳: 総売上 = システム売上 + 広告運用代行費 を
+            左右で対比。左2列はシステム売上（税抜→税込）、
+            右2列は広告運用代行費（税抜→税込）で税抜/税込の並びを一致させる */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             size="sm"
             label="システム売上（税抜き）"
             value={yen(systemRevenueExTax)}
             icon={<Coins className="w-4 h-4" />}
-            hint={hasData ? "総売上 − 運用代行（税率10%仮定）" : dataHint}
+            hint={hasData ? "総売上 − 広告運用代行費" : dataHint}
           />
           <StatCard
             size="sm"
             label="システム売上（税込み）"
             value={yen(systemRevenueIncTax)}
             icon={<Coins className="w-4 h-4" />}
-            hint={hasData ? "総売上 − 運用代行" : dataHint}
+            hint={hasData ? "総売上 − 広告運用代行費" : dataHint}
           />
           <StatCard
             size="sm"
-            label="広告運用代行費"
-            value={yen(sheetTotals.operationFeeIncTax)}
+            label="広告運用代行費（税抜き）"
+            value={yen(opFeeExTax)}
+            icon={<Megaphone className="w-4 h-4" />}
+            hint={
+              hasData
+                ? sheetTotals.operationFeeExTax > 0
+                  ? "税抜"
+                  : "税率10%仮定"
+                : dataHint
+            }
+          />
+          <StatCard
+            size="sm"
+            label="広告運用代行費（税込み）"
+            value={yen(opFeeIncTax)}
             icon={<Megaphone className="w-4 h-4" />}
             hint={hasData ? "税込" : dataHint}
           />

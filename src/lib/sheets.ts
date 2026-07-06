@@ -31,6 +31,7 @@ export type DashboardTotals = {
   customerCount: number;
   brandCount: number;
   storeCount: number;
+  operationFeeExTax: number;
   operationFeeIncTax: number;
   transferCount: number;
   invoiceCount: number;
@@ -313,6 +314,7 @@ export async function fetchDashboardTotals(
     customerCount: 0,
     brandCount: 0,
     storeCount: 0,
+    operationFeeExTax: 0,
     operationFeeIncTax: 0,
     transferCount: 0,
     invoiceCount: 0,
@@ -352,6 +354,10 @@ export async function fetchDashboardTotals(
       customerCount: rows.length,
       brandCount: rows.reduce((s, r) => s + parseAmount(r.brandCount), 0),
       storeCount: rows.reduce((s, r) => s + parseAmount(r.storeCount), 0),
+      operationFeeExTax: rows.reduce(
+        (s, r) => s + parseAmount(r.operationFeeExTax),
+        0,
+      ),
       operationFeeIncTax: rows.reduce(
         (s, r) => s + parseAmount(r.operationFeeIncTax),
         0,
