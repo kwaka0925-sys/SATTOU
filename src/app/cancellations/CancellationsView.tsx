@@ -22,6 +22,7 @@ const OVERRIDES_STORAGE_KEY = "sattou-invoice-overrides";
 type Props = {
   monthlyRows: MonthRows[];
   configured: boolean;
+  year: number;
 };
 
 function monthLabel(month: string): string {
@@ -34,7 +35,11 @@ function shortMonth(month: string): string {
   return `${parseInt(m, 10)}月`;
 }
 
-export default function CancellationsView({ monthlyRows, configured }: Props) {
+export default function CancellationsView({
+  monthlyRows,
+  configured,
+  year,
+}: Props) {
   const [q, setQ] = useState("");
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [overrides, setOverrides] = useState<OverridesMap>({});
@@ -96,14 +101,15 @@ export default function CancellationsView({ monthlyRows, configured }: Props) {
     });
   }, [allCancellations, q, monthFilter]);
 
-  const latestMonthWithData =
-    monthlyCancellations[monthlyCancellations.length - 1]?.cancelled.length ?? 0;
+  const currentMonthIdx = new Date().getMonth();
+  const thisMonthCount =
+    monthlyCancellations[currentMonthIdx]?.cancelled.length ?? 0;
 
   return (
     <div>
       <TopBar
         title="解約一覧"
-        subtitle={`直近 ${monthlyRows.length} ヶ月 · 累計解約 ${totalCount} 件 · 今月 ${latestMonthWithData} 件`}
+        subtitle={`${year}年 · 累計解約 ${totalCount} 件 · 今月 ${thisMonthCount} 件`}
       />
       <div className="p-6 space-y-6">
         {!configured && (
@@ -122,7 +128,7 @@ export default function CancellationsView({ monthlyRows, configured }: Props) {
             </h2>
             <div className="text-xs text-slate-500">継続列が「解約」を含む行を集計</div>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {monthlyCancellations.map(({ month, cancelled }) => {
               const active = monthFilter === month;
               return (

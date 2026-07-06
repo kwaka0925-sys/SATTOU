@@ -12,23 +12,17 @@ export type MonthRows = {
   rows: SheetInvoice[];
 };
 
-function lastNMonths(n: number): string[] {
-  const now = new Date();
+function yearMonths(year: number): string[] {
   const months: string[] = [];
-  for (let i = n - 1; i >= 0; i--) {
-    let month = now.getMonth() + 1 - i;
-    let year = now.getFullYear();
-    while (month < 1) {
-      month += 12;
-      year -= 1;
-    }
-    months.push(`${year}-${String(month).padStart(2, "0")}`);
+  for (let m = 1; m <= 12; m++) {
+    months.push(`${year}-${String(m).padStart(2, "0")}`);
   }
   return months;
 }
 
 export default async function CancellationsPage() {
-  const months = lastNMonths(12);
+  const year = new Date().getFullYear();
+  const months = yearMonths(year);
   const configured = isBackendConfigured("billing");
 
   const monthlyRows: MonthRows[] = await Promise.all(
@@ -39,6 +33,10 @@ export default async function CancellationsPage() {
   );
 
   return (
-    <CancellationsView monthlyRows={monthlyRows} configured={configured} />
+    <CancellationsView
+      monthlyRows={monthlyRows}
+      configured={configured}
+      year={year}
+    />
   );
 }
