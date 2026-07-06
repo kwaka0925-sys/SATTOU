@@ -4,14 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
   FileText,
   Settings,
   CircleDot,
   BarChart3,
-  Upload,
   Building2,
   UserX,
+  UserPlus,
   FileSignature,
   type LucideIcon,
 } from "lucide-react";
@@ -36,9 +35,8 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: "クライアント",
+    title: "導入店舗",
     items: [
-      { href: "/clients", label: "請求書一覧", icon: Users },
       { href: "/stores", label: "sattou導入店舗", icon: Building2 },
     ],
   },
@@ -51,14 +49,19 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "請求",
     items: [
-      { href: "/invoices", label: "請求書", icon: FileText, exact: true },
-      { href: "/invoices/import", label: "取り込み", icon: Upload },
+      { href: "/clients", label: "請求書一覧", icon: FileText },
     ],
   },
   {
     title: "契約",
     items: [
       { href: "/contracts", label: "契約書関連", icon: FileSignature },
+    ],
+  },
+  {
+    title: "新規",
+    items: [
+      { href: "/new-registrations", label: "新規登録", icon: UserPlus },
     ],
   },
   {
