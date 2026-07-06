@@ -195,11 +195,10 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                   </th>
                   <th className="text-left font-medium px-4 py-3">URL</th>
                   <th className="text-left font-medium px-4 py-3">解約</th>
-                  <th className="text-left font-medium px-4 py-3">マーケ</th>
+                  <th className="text-left font-medium px-4 py-3">識別子</th>
                   <th className="text-right font-medium px-4 py-3">システム納品</th>
                   <th className="text-center font-medium px-4 py-3">旧SATTOUユーザ</th>
                   <th className="text-left font-medium px-4 py-3">HPB連携</th>
-                  <th className="text-left font-medium px-4 py-3">識別子</th>
                   <th className="text-left font-medium px-4 py-3">初期記入シート</th>
                 </tr>
               </thead>
@@ -251,7 +250,7 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                         )}
                       </label>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{r.marketer || "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.identifier || "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {r.systemDelivery || <span className="text-slate-400">—</span>}
                     </td>
@@ -269,7 +268,6 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.identifier || "—"}</td>
                     <td className="px-4 py-3">
                       {r.initialSheetUrl ? (
                         <a

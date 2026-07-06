@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Trophy,
   FileText,
   Settings,
   CircleDot,
@@ -32,7 +31,6 @@ const NAV_SECTIONS: NavSection[] = [
     title: "経営",
     items: [
       { href: "/", label: "ダッシュボード", icon: LayoutDashboard, exact: true },
-      { href: "/rankings", label: "ランキング・比較", icon: Trophy },
     ],
   },
   {

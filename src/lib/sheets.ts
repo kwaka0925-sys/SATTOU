@@ -293,20 +293,15 @@ function formatDeliveryDate(v: unknown): string {
 
   // ISO or slash: 2026-10-15 / 2026/10/15
   let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if (m) return `${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日導入済み`;
+  if (m) return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)} 導入済み`;
 
-  // Japanese: 10月15日 or 10月15日... (leave suffix as-is if present)
+  // Japanese: 10月15日 (with or without suffix)
   m = s.match(/^(\d{1,2})月(\d{1,2})日/);
-  if (m) {
-    const rest = s.slice(m[0].length);
-    return rest.includes("導入")
-      ? s
-      : `${parseInt(m[1], 10)}月${parseInt(m[2], 10)}日導入済み`;
-  }
+  if (m) return `${parseInt(m[1], 10)}/${parseInt(m[2], 10)} 導入済み`;
 
   // Slash: 10/15 or 10/15/2026
   m = s.match(/^(\d{1,2})[/](\d{1,2})/);
-  if (m) return `${parseInt(m[1], 10)}月${parseInt(m[2], 10)}日導入済み`;
+  if (m) return `${parseInt(m[1], 10)}/${parseInt(m[2], 10)} 導入済み`;
 
   return s;
 }
