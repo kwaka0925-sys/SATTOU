@@ -35,6 +35,7 @@ export type DashboardTotals = {
   operationFeeIncTax: number;
   transferCount: number;
   invoiceCount: number;
+  cancelledCount: number;
 };
 
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
@@ -318,6 +319,7 @@ export async function fetchDashboardTotals(
     operationFeeIncTax: 0,
     transferCount: 0,
     invoiceCount: 0,
+    cancelledCount: 0,
   };
   const cfg = backendConfig("billing");
   if (!cfg.url || !cfg.token) return empty;
@@ -367,6 +369,9 @@ export async function fetchDashboardTotals(
       ).length,
       invoiceCount: rows.filter((r) =>
         (r.paymentMethod ?? "").includes("請求書"),
+      ).length,
+      cancelledCount: rows.filter((r) =>
+        (r.subscriptionStatus ?? "").includes("解約"),
       ).length,
     };
   } catch (err) {
