@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { yen } from "@/lib/format";
 import TopBar from "@/components/TopBar";
+import MonthPicker from "@/components/MonthPicker";
 import { FileSpreadsheet, FileText, Search } from "lucide-react";
 import type { Invoice } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
@@ -51,6 +52,10 @@ export default function InvoicesView({ rows, month, configured }: Props) {
         subtitle={`${month} / 発行済み ${rows.length} 件 / 表示 ${filtered.length} 件`}
       />
       <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-500">月表示</div>
+          <MonthPicker current={month} />
+        </div>
         {!configured && (
           <div className="card p-4 border border-amber-200 bg-amber-50/60 text-amber-900 text-sm">
             GAS連携が未設定です。<code className="font-mono">.env.local</code> に

@@ -1,6 +1,7 @@
 import { Coins, Users, Store } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import StatCard from "@/components/StatCard";
+import MonthPicker from "@/components/MonthPicker";
 import { num, yen } from "@/lib/format";
 import { fetchDashboardTotals, currentMonth } from "@/lib/sheets";
 
@@ -30,6 +31,10 @@ export default async function Page({
       />
 
       <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-500">月表示</div>
+          <MonthPicker current={month} />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             label="総売上"

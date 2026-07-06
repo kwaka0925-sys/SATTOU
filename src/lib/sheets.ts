@@ -172,17 +172,47 @@ export function rowToInvoice(row: SheetRow, month: string): SheetInvoice {
   };
 }
 
+type GasBackend = "stores" | "billing";
+
+// Return the {url, token} to use for a given backend.
+// The billing backend prefers its dedicated env vars but falls back to the
+// shared SHEETS_GAS_URL / SHEETS_GAS_TOKEN so setups with a single spreadsheet
+// keep working.
+function backendConfig(backend: GasBackend): {
+  url?: string;
+  token?: string;
+} {
+  if (backend === "billing") {
+    return {
+      url:
+        process.env.SHEETS_GAS_URL_BILLING || process.env.SHEETS_GAS_URL,
+      token:
+        process.env.SHEETS_GAS_TOKEN_BILLING || process.env.SHEETS_GAS_TOKEN,
+    };
+  }
+  return {
+    url: process.env.SHEETS_GAS_URL,
+    token: process.env.SHEETS_GAS_TOKEN,
+  };
+}
+
+export function isBackendConfigured(backend: GasBackend): boolean {
+  const cfg = backendConfig(backend);
+  return Boolean(cfg.url && cfg.token);
+}
+
 function isConfigured(): boolean {
-  return Boolean(process.env.SHEETS_GAS_URL && process.env.SHEETS_GAS_TOKEN);
+  return isBackendConfigured("stores");
 }
 
 export async function fetchInvoicesFromSheet(
   month: string = currentMonth(),
 ): Promise<SheetInvoice[]> {
-  if (!isConfigured()) return [];
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return [];
 
-  const url = new URL(process.env.SHEETS_GAS_URL!);
-  url.searchParams.set("token", process.env.SHEETS_GAS_TOKEN!);
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
   try {
@@ -220,10 +250,11 @@ export async function fetchDashboardTotals(
     brandCount: 0,
     storeCount: 0,
   };
-  if (!isConfigured()) return empty;
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return empty;
 
-  const url = new URL(process.env.SHEETS_GAS_URL!);
-  url.searchParams.set("token", process.env.SHEETS_GAS_TOKEN!);
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
   try {
@@ -322,10 +353,11 @@ export type StoreSheetResult = {
 export async function fetchStoresFromSheet(
   month: string = currentMonth(),
 ): Promise<StoreSheetResult> {
-  if (!isConfigured()) return { configured: false, rows: [] };
+  const cfg = backendConfig("stores");
+  if (!cfg.url || !cfg.token) return { configured: false, rows: [] };
 
-  const url = new URL(process.env.SHEETS_GAS_URL!);
-  url.searchParams.set("token", process.env.SHEETS_GAS_TOKEN!);
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
   try {

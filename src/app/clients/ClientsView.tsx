@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
+import MonthPicker from "@/components/MonthPicker";
 import { Filter, Search } from "lucide-react";
 import type { Invoice, InvoicePaymentMethod } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
@@ -83,6 +84,10 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
         subtitle={`${monthLabel(month)}分 · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
       <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-500">月表示</div>
+          <MonthPicker current={month} />
+        </div>
         {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
             GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と

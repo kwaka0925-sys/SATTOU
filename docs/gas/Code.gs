@@ -80,10 +80,14 @@ const COLUMN_INDEX = {
 function MONTH_TAB_PATTERNS(month) {
   const [y, m] = month.split('-');
   const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
   return [
     month,
     `${y}年${mNum}月_請求管理`,
     `${y}年${mNum}月`,
+    `${y}年請求書${mNum}月`,
+    `${y}年請求書${mNum}月（${opMonth}月稼働）`,
+    `${y}年請求書${mNum}月(${opMonth}月稼働)`,
     '請求管理',
   ];
 }
