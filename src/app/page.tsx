@@ -43,7 +43,7 @@ export default async function Page({
   return (
     <div>
       <TopBar
-        title="殺到管理"
+        title="SATTOU管理"
         subtitle={`SATTOU 経営指標サマリー — ${monthLabel(month)}分`}
       />
 
