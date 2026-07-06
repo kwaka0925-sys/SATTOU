@@ -133,6 +133,31 @@ export default function ContractsView({ clients, configured }: Props) {
     setPickerQuery("");
   };
 
+  // Auto-fill client name when the operator types an existing subscriber ID.
+  const handleSubscriberIdChange = (value: string) => {
+    setFormSubscriberId(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const match = clients.find((c) => c.subscriberId.trim() === trimmed);
+    if (match) {
+      setFormClientName(match.clientName);
+    }
+  };
+
+  // Auto-fill subscriber ID when the operator types a client name that
+  // matches one of the current sheet rows.
+  const handleClientNameChange = (value: string) => {
+    setFormClientName(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const match = clients.find(
+      (c) => c.clientName.trim() === trimmed && c.subscriberId,
+    );
+    if (match) {
+      setFormSubscriberId(match.subscriberId);
+    }
+  };
+
   const pickerResults = useMemo(() => {
     const query = pickerQuery.trim().toLowerCase();
     const source = query
@@ -197,16 +222,37 @@ export default function ContractsView({ clients, configured }: Props) {
               <div className="flex flex-wrap gap-2">
                 <input
                   value={formClientName}
-                  onChange={(e) => setFormClientName(e.target.value)}
+                  onChange={(e) => handleClientNameChange(e.target.value)}
                   placeholder="サロン名"
+                  list="contract-clientname-suggestions"
                   className="input flex-1 min-w-[220px]"
                 />
                 <input
                   value={formSubscriberId}
-                  onChange={(e) => setFormSubscriberId(e.target.value)}
+                  onChange={(e) => handleSubscriberIdChange(e.target.value)}
                   placeholder="加入者識別番号"
+                  list="contract-subscriberid-suggestions"
                   className="input w-40"
                 />
+                <datalist id="contract-clientname-suggestions">
+                  {clients.map((c, i) => (
+                    <option
+                      key={`name-${i}`}
+                      value={c.clientName}
+                    >
+                      {c.subscriberId ? `加入者ID: ${c.subscriberId}` : ""}
+                    </option>
+                  ))}
+                </datalist>
+                <datalist id="contract-subscriberid-suggestions">
+                  {clients
+                    .filter((c) => c.subscriberId)
+                    .map((c, i) => (
+                      <option key={`id-${i}`} value={c.subscriberId}>
+                        {c.clientName}
+                      </option>
+                    ))}
+                </datalist>
                 <button
                   type="button"
                   onClick={() => setPickerOpen((v) => !v)}
