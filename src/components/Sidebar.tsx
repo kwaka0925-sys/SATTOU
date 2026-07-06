@@ -12,6 +12,8 @@ import {
   UserX,
   UserPlus,
   FileSignature,
+  Store,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,6 +64,8 @@ const NAV_SECTIONS: NavSection[] = [
     title: "新規",
     items: [
       { href: "/new-registrations", label: "新規登録", icon: UserPlus },
+      { href: "/store-additions", label: "店舗追加", icon: Store },
+      { href: "/hpb-additions", label: "ホットペッパー連携追加", icon: Sparkles },
     ],
   },
   {
