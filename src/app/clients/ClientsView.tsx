@@ -243,14 +243,20 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
 
   const totals = filtered.reduce(
     (acc, r) => {
+      const rowPm = effectivePaymentMethod(r);
       const rowProgress = effectiveProgress(r);
+      // 未入金は「請求書払い」の中で「入金確認済み」でない金額のみを集計。
+      // 口座振替は運用上「入金確認済み」のステータス更新を行わないため、
+      // 集計から完全に除外する。「請求なし」は請求自体が無いので同様に除外。
+      const isInvoicePm = rowPm === "請求書";
       const isPaid = rowProgress === "入金確認済み";
       const isNoBill = rowProgress === "請求なし";
+      const countsAsUnpaid = isInvoicePm && !isPaid && !isNoBill;
       return {
         brand: acc.brand + (r.brandCount ?? 0),
         store: acc.store + (r.storeCount ?? 0),
         amount: acc.amount + r.amount,
-        unpaid: acc.unpaid + (!isPaid && !isNoBill ? r.amount : 0),
+        unpaid: acc.unpaid + (countsAsUnpaid ? r.amount : 0),
       };
     },
     { brand: 0, store: 0, amount: 0, unpaid: 0 },
@@ -303,6 +309,9 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
             <div className="text-sm text-slate-500">未入金</div>
             <div className="text-2xl font-semibold mt-1 text-amber-600">
               {yen(totals.unpaid)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1">
+              請求書払い · 入金確認済み以外
             </div>
           </div>
         </div>

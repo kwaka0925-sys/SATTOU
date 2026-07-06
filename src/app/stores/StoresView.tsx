@@ -97,7 +97,7 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
   );
 
   return (
-    <div>
+    <div className="h-screen flex flex-col">
       <TopBar
         title="sattou導入店舗"
         subtitle={
@@ -106,7 +106,7 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             : `全 ${rows.length} 店舗 / 表示 ${filtered.length} 店舗`
         }
       />
-      <div className="p-6 space-y-4">
+      <div className="shrink-0 p-6 pb-4 space-y-4">
         {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
             GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
@@ -183,14 +183,15 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             </select>
           )}
         </div>
-
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+      </div>
+      <div className="flex-1 min-h-0 px-6 pb-6">
+        <div className="card h-full flex flex-col overflow-hidden">
+          <div className="overflow-auto flex-1">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
                   <th className="text-right font-medium px-3 py-3">導入順</th>
-                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-10 min-w-[180px]">
+                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px]">
                     クライアント名
                   </th>
                   <th className="text-left font-medium px-4 py-3">URL</th>
