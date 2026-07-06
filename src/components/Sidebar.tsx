@@ -12,6 +12,7 @@ import {
   Upload,
   Building2,
   UserX,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 
@@ -52,6 +53,12 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/invoices", label: "請求書", icon: FileText, exact: true },
       { href: "/invoices/import", label: "取り込み", icon: Upload },
+    ],
+  },
+  {
+    title: "契約",
+    items: [
+      { href: "/contracts", label: "契約書関連", icon: FileSignature },
     ],
   },
   {
