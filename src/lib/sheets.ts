@@ -32,6 +32,8 @@ export type DashboardTotals = {
   brandCount: number;
   storeCount: number;
   operationFeeIncTax: number;
+  transferCount: number;
+  invoiceCount: number;
 };
 
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
@@ -312,6 +314,8 @@ export async function fetchDashboardTotals(
     brandCount: 0,
     storeCount: 0,
     operationFeeIncTax: 0,
+    transferCount: 0,
+    invoiceCount: 0,
   };
   const cfg = backendConfig("billing");
   if (!cfg.url || !cfg.token) return empty;
@@ -352,6 +356,12 @@ export async function fetchDashboardTotals(
         (s, r) => s + parseAmount(r.operationFeeIncTax),
         0,
       ),
+      transferCount: rows.filter((r) =>
+        (r.paymentMethod ?? "").includes("振替"),
+      ).length,
+      invoiceCount: rows.filter((r) =>
+        (r.paymentMethod ?? "").includes("請求書"),
+      ).length,
     };
   } catch (err) {
     console.warn("[sheets] fetch failed", err);

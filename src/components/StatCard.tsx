@@ -1,28 +1,40 @@
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
+type Size = "md" | "sm";
+
 export default function StatCard({
   label,
   value,
   delta,
   icon,
   hint,
+  size = "md",
 }: {
   label: string;
   value: ReactNode;
   delta?: number;
   icon?: ReactNode;
   hint?: string;
+  size?: Size;
 }) {
   const positive = (delta ?? 0) >= 0;
+  const cardPad = size === "sm" ? "p-4" : "p-5";
+  const labelCls =
+    size === "sm" ? "text-xs text-slate-500" : "text-sm text-slate-500";
+  const valueCls =
+    size === "sm"
+      ? "mt-1 text-xl font-semibold tracking-tight"
+      : "mt-2 text-2xl font-semibold tracking-tight";
+  const footGap = size === "sm" ? "mt-1" : "mt-2";
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between">
-        <div className="text-sm text-slate-500">{label}</div>
-        {icon && <div className="text-slate-400">{icon}</div>}
+    <div className={`card ${cardPad}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className={labelCls}>{label}</div>
+        {icon && <div className="text-slate-400 shrink-0">{icon}</div>}
       </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
-      <div className="mt-2 flex items-center gap-2 text-xs">
+      <div className={valueCls}>{value}</div>
+      <div className={`${footGap} flex items-center gap-2 text-xs`}>
         {typeof delta === "number" && (
           <span
             className={`pill ${
