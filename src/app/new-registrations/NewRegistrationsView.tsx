@@ -8,6 +8,19 @@ import { num } from "@/lib/format";
 const STORAGE_KEY = "sattou-new-registrations";
 
 type HPBValue = "あり" | "なし";
+type JoinType = "システム＋マーケ" | "システムのみ" | "マーケのみ";
+
+const JOIN_TYPES: JoinType[] = [
+  "システム＋マーケ",
+  "システムのみ",
+  "マーケのみ",
+];
+
+const JOIN_TYPE_STYLE: Record<JoinType, string> = {
+  "システム＋マーケ": "bg-rose-50 text-rose-700",
+  "システムのみ": "bg-emerald-50 text-emerald-700",
+  "マーケのみ": "bg-amber-50 text-amber-700",
+};
 
 type NewRegistration = {
   id: string;
@@ -15,6 +28,7 @@ type NewRegistration = {
   store: string;
   representative: string;
   installDate: string; // YYYY-MM-DD
+  joinType: JoinType;
   hpbIntegrated: HPBValue;
   createdAt: string;
 };
@@ -52,6 +66,7 @@ export default function NewRegistrationsView({ year }: Props) {
   const [store, setStore] = useState("");
   const [representative, setRepresentative] = useState("");
   const [installDate, setInstallDate] = useState("");
+  const [joinType, setJoinType] = useState<JoinType>("システム＋マーケ");
   const [hpb, setHpb] = useState<HPBValue>("なし");
 
   useEffect(() => {
@@ -59,7 +74,14 @@ export default function NewRegistrationsView({ year }: Props) {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setRegs(parsed);
+        if (Array.isArray(parsed)) {
+          // 旧レコードには joinType が存在しないので既定値で補う
+          const migrated = parsed.map((r: NewRegistration) => ({
+            ...r,
+            joinType: r.joinType ?? "システム＋マーケ",
+          }));
+          setRegs(migrated);
+        }
       }
     } catch {
       // ignore
@@ -80,6 +102,7 @@ export default function NewRegistrationsView({ year }: Props) {
     setStore("");
     setRepresentative("");
     setInstallDate("");
+    setJoinType("システム＋マーケ");
     setHpb("なし");
     setEditingId(null);
     setShowForm(false);
@@ -97,6 +120,7 @@ export default function NewRegistrationsView({ year }: Props) {
     setStore(r.store);
     setRepresentative(r.representative);
     setInstallDate(r.installDate);
+    setJoinType(r.joinType ?? "システム＋マーケ");
     setHpb(r.hpbIntegrated);
     setEditingId(r.id);
     setShowForm(true);
@@ -115,6 +139,7 @@ export default function NewRegistrationsView({ year }: Props) {
       store: s,
       representative: representative.trim(),
       installDate,
+      joinType,
       hpbIntegrated: hpb,
       createdAt: existing?.createdAt ?? now,
     };
@@ -314,6 +339,22 @@ export default function NewRegistrationsView({ year }: Props) {
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
+                  入会方法
+                </label>
+                <select
+                  value={joinType}
+                  onChange={(e) => setJoinType(e.target.value as JoinType)}
+                  className="input"
+                >
+                  {JOIN_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-slate-700 block">
                   ホットペッパービューティー連携
                 </label>
                 <select
@@ -352,6 +393,7 @@ export default function NewRegistrationsView({ year }: Props) {
                   <th className="text-left font-medium px-4 py-3">ブランド名</th>
                   <th className="text-left font-medium px-4 py-3">店舗名</th>
                   <th className="text-left font-medium px-4 py-3">代表者名</th>
+                  <th className="text-left font-medium px-4 py-3">入会方法</th>
                   <th className="text-left font-medium px-4 py-3">HPB連携</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -360,7 +402,7 @@ export default function NewRegistrationsView({ year }: Props) {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       {regs.length === 0
@@ -377,6 +419,15 @@ export default function NewRegistrationsView({ year }: Props) {
                     <td className="px-4 py-3">{r.brand || "—"}</td>
                     <td className="px-4 py-3 font-medium">{r.store}</td>
                     <td className="px-4 py-3">{r.representative || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`pill ${
+                          JOIN_TYPE_STYLE[r.joinType ?? "システム＋マーケ"]
+                        }`}
+                      >
+                        {r.joinType ?? "システム＋マーケ"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`pill ${

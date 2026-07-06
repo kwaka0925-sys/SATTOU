@@ -32,6 +32,17 @@ function newId(): string {
   return `c-${Date.now().toString(36)}-${rand}`;
 }
 
+// URL 入力欄に "docs.google.com/..." のようにプロトコル無しで貼られた場合、
+// ブラウザは相対URLとして解釈してしまい target="_blank" でも開けない。
+// 明示的な protocol (http/https/mailto など) が無いときは https:// を補う。
+function normalizeUrl(raw: string): string {
+  const url = raw.trim();
+  if (!url) return url;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  return `https://${url}`;
+}
+
 export default function ContractsView({ clients, configured }: Props) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [q, setQ] = useState("");
@@ -388,7 +399,7 @@ export default function ContractsView({ clients, configured }: Props) {
                     </td>
                     <td className="px-4 py-3">
                       <a
-                        href={c.contractUrl}
+                        href={normalizeUrl(c.contractUrl)}
                         target="_blank"
                         rel="noreferrer noopener"
                         className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs max-w-[280px] truncate"
