@@ -402,11 +402,33 @@ export default function ContractsView({ clients, configured }: Props) {
                         href={normalizeUrl(c.contractUrl)}
                         target="_blank"
                         rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1 text-brand-700 hover:underline text-xs max-w-[280px] truncate"
+                        onClick={(e) => {
+                          // iframe プレビュー等で target="_blank" が
+                          // 効かないケースに備えて、明示的に新しいタブを開く。
+                          // ポップアップブロックされた場合は同一タブで遷移。
+                          const url = normalizeUrl(c.contractUrl);
+                          if (!url) return;
+                          e.preventDefault();
+                          const win = window.open(
+                            url,
+                            "_blank",
+                            "noopener,noreferrer",
+                          );
+                          if (!win) {
+                            window.location.href = url;
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-1 text-brand-700 hover:bg-brand-100 hover:underline text-xs cursor-pointer"
                         title={c.contractUrl}
                       >
                         契約書を開く <ExternalLink className="w-3 h-3 shrink-0" />
                       </a>
+                      <div
+                        className="mt-1 text-[10px] text-slate-400 max-w-[280px] truncate"
+                        title={c.contractUrl}
+                      >
+                        {c.contractUrl}
+                      </div>
                     </td>
                     <td
                       className="px-4 py-3 text-xs text-slate-500 max-w-[220px] truncate"

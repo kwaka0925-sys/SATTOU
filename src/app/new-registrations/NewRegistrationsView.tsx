@@ -17,9 +17,9 @@ const JOIN_TYPES: JoinType[] = [
 ];
 
 const JOIN_TYPE_STYLE: Record<JoinType, string> = {
-  "システム＋マーケ": "bg-rose-50 text-rose-700",
-  "システムのみ": "bg-emerald-50 text-emerald-700",
-  "マーケのみ": "bg-amber-50 text-amber-700",
+  "システム＋マーケ": "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
+  "システムのみ": "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
+  "マーケのみ": "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
 };
 
 type NewRegistration = {
@@ -432,7 +432,7 @@ export default function NewRegistrationsView({ year }: Props) {
                       <span
                         className={`pill ${
                           r.hpbIntegrated === "あり"
-                            ? "bg-sky-50 text-sky-700"
+                            ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
                             : "bg-slate-100 text-slate-500"
                         }`}
                       >
