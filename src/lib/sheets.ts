@@ -232,7 +232,16 @@ export async function fetchInvoicesFromSheet(
     return rows
       .filter((r) => r.salonName && r.salonName.trim())
       .map((r) => rowToInvoice(r, month))
-      .sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1));
+      .sort((a, b) => {
+        const na = parseInt(a.subscriberId ?? "", 10);
+        const nb = parseInt(b.subscriberId ?? "", 10);
+        const aFin = Number.isFinite(na);
+        const bFin = Number.isFinite(nb);
+        if (aFin && bFin) return na - nb;
+        if (aFin) return -1;
+        if (bFin) return 1;
+        return (a.subscriberId ?? "").localeCompare(b.subscriberId ?? "");
+      });
   } catch (err) {
     console.warn("[sheets] fetch failed", err);
     return [];

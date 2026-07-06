@@ -36,7 +36,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "クライアント",
     items: [
-      { href: "/clients", label: "クライアント一覧", icon: Users },
+      { href: "/clients", label: "請求書一覧", icon: Users },
       { href: "/stores", label: "sattou導入店舗", icon: Building2 },
     ],
   },

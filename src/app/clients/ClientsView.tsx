@@ -80,7 +80,7 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
   return (
     <div>
       <TopBar
-        title="クライアント"
+        title="請求書"
         subtitle={`${monthLabel(month)}分 · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
       <div className="p-6 space-y-4">
