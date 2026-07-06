@@ -431,22 +431,6 @@ export default function ContractsView({ clients, configured }: Props) {
                             href={normalizeUrl(c.contractUrl)}
                             target="_blank"
                             rel="noreferrer noopener"
-                            onClick={(e) => {
-                              // iframe プレビュー等で target="_blank" が
-                              // 効かないケースに備えて、明示的に新しいタブを開く。
-                              // ポップアップブロックされた場合は同一タブで遷移。
-                              const url = normalizeUrl(c.contractUrl);
-                              if (!url) return;
-                              e.preventDefault();
-                              const win = window.open(
-                                url,
-                                "_blank",
-                                "noopener,noreferrer",
-                              );
-                              if (!win) {
-                                window.location.href = url;
-                              }
-                            }}
                             className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-1 text-brand-700 hover:bg-brand-100 hover:underline text-xs cursor-pointer"
                             title={c.contractUrl}
                           >
