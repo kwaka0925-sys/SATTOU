@@ -21,6 +21,13 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+function monthTitle(month: string): string {
+  const [y, m] = month.split("-");
+  const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
+  return `${y}年${mNum}月分（${opMonth}月稼働分）`;
+}
+
 export default async function Page({
   searchParams,
 }: {
@@ -44,7 +51,7 @@ export default async function Page({
     <div>
       <TopBar
         title="SATTOU管理"
-        subtitle={`SATTOU 経営指標サマリー — ${monthLabel(month)}分`}
+        subtitle={`SATTOU 経営指標サマリー — ${monthTitle(month)}`}
       />
 
       <div className="p-6 space-y-4">

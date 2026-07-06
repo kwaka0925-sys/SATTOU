@@ -78,6 +78,13 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+function monthTitle(month: string): string {
+  const [y, m] = month.split("-");
+  const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
+  return `${y}年${mNum}月分（${opMonth}月稼働分）`;
+}
+
 export default function ClientsView({ rows, month, configured, isMock }: Props) {
   const [q, setQ] = useState("");
   const [pm, setPm] = useState<PmFilter>("all");
@@ -253,7 +260,7 @@ export default function ClientsView({ rows, month, configured, isMock }: Props) 
     <div>
       <TopBar
         title="請求書"
-        subtitle={`${monthLabel(month)}分 · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
+        subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">

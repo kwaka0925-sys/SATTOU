@@ -20,6 +20,13 @@ function monthLabel(month: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+function monthTitle(month: string): string {
+  const [y, m] = month.split("-");
+  const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
+  return `${y}年${mNum}月分（${opMonth}月稼働分）`;
+}
+
 export default function AdsView({ rows, month, configured, isMock }: Props) {
   const [q, setQ] = useState("");
   const [marketer, setMarketer] = useState<string>("all");
@@ -59,7 +66,7 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
     <div>
       <TopBar
         title="運用代行売上"
-        subtitle={`${monthLabel(month)}分 · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
+        subtitle={`${monthTitle(month)} · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
       />
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
