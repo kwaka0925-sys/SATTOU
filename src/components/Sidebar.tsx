@@ -115,14 +115,15 @@ export default function Sidebar() {
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white min-h-screen flex flex-col">
       <div className="px-5 py-5 border-b border-slate-200">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold">
-            S
+        <Link href="/" className="flex flex-col gap-1">
+          {/* ロゴ: 太字の "SATTOU." を黒テキストで表現 (2枚目のスクショに合わせた) */}
+          <div className="font-extrabold text-lg tracking-tight text-slate-900 leading-none">
+            SATTOU<span className="text-brand-600">.</span>
           </div>
-          <div>
-            <div className="font-semibold leading-tight">SATTOU Hub</div>
-            <div className="text-xs text-slate-500">集客一元管理</div>
+          <div className="font-semibold text-sm leading-tight text-slate-700">
+            SATTOU管理表
           </div>
+          <div className="text-xs text-slate-500">集客一元管理</div>
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-4">

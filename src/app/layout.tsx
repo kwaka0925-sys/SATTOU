@@ -3,8 +3,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "SATTOU Hub - 集客一元管理ダッシュボード",
-  description: "Meta広告 × SATTOU予約データを一元管理するクライアント集客ダッシュボード",
+  title: "SATTOU管理表 - 集客一元管理",
+  description: "SATTOU クライアントの請求・広告運用・システム移行状況を一元管理するダッシュボード",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
