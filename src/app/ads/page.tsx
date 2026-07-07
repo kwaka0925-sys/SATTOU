@@ -1,5 +1,5 @@
 import {
-  fetchInvoicesFromSheet,
+  fetchInvoicesFromSheetWithMeta,
   currentMonth,
   isBackendConfigured,
 } from "@/lib/sheets";
@@ -15,14 +15,17 @@ export default async function AdsPage({
   searchParams?: SearchParams;
 }) {
   const month = searchParams?.month ?? currentMonth();
-  const rows = await fetchInvoicesFromSheet(month);
+  const result = await fetchInvoicesFromSheetWithMeta(month);
   const configured = isBackendConfigured("billing");
   return (
     <AdsView
-      rows={rows}
+      rows={result.rows}
       month={month}
       configured={configured}
       isMock={false}
+      sheetName={result.sheetName}
+      expectedSheets={result.expectedSheets}
+      sheetMatched={result.sheetMatched}
     />
   );
 }

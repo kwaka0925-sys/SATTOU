@@ -210,11 +210,25 @@ function isConfigured(): boolean {
   return isBackendConfigured("stores");
 }
 
-export async function fetchInvoicesFromSheet(
+export type InvoicesFetchResult = {
+  rows: SheetInvoice[];
+  sheetName?: string;
+  expectedSheets: string[];
+  sheetMatched: boolean;
+};
+
+// 内部関数: sheet 名とマッチ判定も返すバージョン。診断表示に使う。
+export async function fetchInvoicesFromSheetWithMeta(
   month: string = currentMonth(),
-): Promise<SheetInvoice[]> {
+): Promise<InvoicesFetchResult> {
+  const expectedSheets = strictSheetPatternsForMonth(month);
+  const empty: InvoicesFetchResult = {
+    rows: [],
+    expectedSheets,
+    sheetMatched: false,
+  };
   const cfg = backendConfig("billing");
-  if (!cfg.url || !cfg.token) return [];
+  if (!cfg.url || !cfg.token) return empty;
 
   const url = new URL(cfg.url);
   url.searchParams.set("token", cfg.token);
@@ -226,15 +240,21 @@ export async function fetchInvoicesFromSheet(
     });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
-      return [];
+      return empty;
     }
-    const data = (await res.json()) as { rows?: SheetRow[]; error?: string };
+    const data = (await res.json()) as {
+      rows?: SheetRow[];
+      sheet?: string;
+      error?: string;
+    };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
-      return [];
+      return empty;
     }
+    const sheetName = data.sheet;
+    const sheetMatched = !!sheetName && expectedSheets.includes(sheetName);
     const rows = data.rows ?? [];
-    return rows
+    const invoices = rows
       .filter((r) => r.salonName && r.salonName.trim())
       .map((r) => rowToInvoice(r, month))
       .sort((a, b) => {
@@ -247,16 +267,24 @@ export async function fetchInvoicesFromSheet(
         if (bFin) return 1;
         return (a.subscriberId ?? "").localeCompare(b.subscriberId ?? "");
       });
+    return { rows: invoices, sheetName, expectedSheets, sheetMatched };
   } catch (err) {
     console.warn("[sheets] fetch failed", err);
-    return [];
+    return empty;
   }
+}
+
+export async function fetchInvoicesFromSheet(
+  month: string = currentMonth(),
+): Promise<SheetInvoice[]> {
+  const { rows } = await fetchInvoicesFromSheetWithMeta(month);
+  return rows;
 }
 
 // Sheet names that legitimately map to a specific month. Excludes generic
 // fallback names (like "請求管理") so we can tell when the GAS returned
 // the active sheet as a fallback for a month whose tab doesn't exist.
-function strictSheetPatternsForMonth(month: string): string[] {
+export function strictSheetPatternsForMonth(month: string): string[] {
   const [y, m] = month.split("-");
   const mNum = parseInt(m, 10);
   const opMonth = mNum === 1 ? 12 : mNum - 1;

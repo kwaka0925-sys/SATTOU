@@ -24,6 +24,9 @@ type Props = {
   month: string;
   configured: boolean;
   isMock: boolean;
+  sheetName?: string;
+  expectedSheets?: string[];
+  sheetMatched?: boolean;
 };
 
 function monthLabel(month: string): string {
@@ -75,7 +78,15 @@ type SyncState =
     }
   | { status: "error"; message: string };
 
-export default function AdsView({ rows, month, configured, isMock }: Props) {
+export default function AdsView({
+  rows,
+  month,
+  configured,
+  isMock,
+  sheetName,
+  expectedSheets,
+  sheetMatched,
+}: Props) {
   const [q, setQ] = useState("");
   const [marketer, setMarketer] = useState<string>("all");
   const defaultRange = useMemo(() => operatingMonthRange(month), [month]);
@@ -212,6 +223,46 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
         {configured && rows.length === 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-2">
             {monthLabel(month)}分のデータがシートに見つかりませんでした。
+          </div>
+        )}
+
+        {/* シート名の不一致警告: GAS が「アクティブシート」を返してしまった時に検知 */}
+        {configured && sheetName && sheetMatched === false && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-900 text-xs px-4 py-3 space-y-1">
+            <div className="font-medium flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              シートタブ名が一致していません（フォールバックが発動中）
+            </div>
+            <div className="leading-relaxed">
+              GAS が返したタブ:
+              <code className="font-mono ml-1 bg-white px-1.5 py-0.5 rounded border border-rose-200">
+                {sheetName}
+              </code>
+            </div>
+            <div className="leading-relaxed">
+              期待するタブ名（{monthLabel(month)}分・いずれか一致すればOK）:
+              {expectedSheets && (
+                <span className="ml-1">
+                  {expectedSheets.map((name, i) => (
+                    <code
+                      key={i}
+                      className="font-mono bg-white px-1.5 py-0.5 rounded border border-rose-200 ml-1 mt-1 inline-block"
+                    >
+                      {name}
+                    </code>
+                  ))}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-rose-700">
+              対処: スプレッドシートのタブ名を上のいずれかに揃えてください。半角/全角の括弧や数字、余分な空白が原因の可能性が高いです。
+            </div>
+          </div>
+        )}
+        {configured && sheetName && sheetMatched && (
+          <div className="text-[11px] text-slate-500 px-1">
+            接続中のタブ:
+            <code className="font-mono ml-1 text-slate-600">{sheetName}</code>
           </div>
         )}
 
