@@ -1,6 +1,5 @@
-import LoginGate from "./LoginGate";
-import LoginManagerView from "./LoginManagerView";
+import LoginManagerScreen from "./LoginManagerScreen";
 
 export default function LoginManagerPage() {
-  return <LoginGate>{(locker) => <LoginManagerView locker={locker} />}</LoginGate>;
+  return <LoginManagerScreen />;
 }
