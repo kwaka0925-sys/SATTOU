@@ -36,7 +36,12 @@ type MonthlyUrls = Record<string, string>;
 type BulkPdfState =
   | { status: "idle" }
   | { status: "confirm"; monthKey: string }
-  | { status: "running"; monthKey: string }
+  | {
+      status: "running";
+      monthKey: string;
+      // 自動再試行のラウンド数 (1 が初回)。ラウンド 2 以降は「残りタブを追加処理中」を表示。
+      round?: number;
+    }
   | {
       status: "success";
       monthKey: string;
@@ -54,7 +59,19 @@ type BulkPdfState =
         skipped?: boolean;
       }>;
     }
-  | { status: "error"; monthKey: string; message: string };
+  | {
+      status: "error";
+      monthKey: string;
+      message: string;
+      // GAS の生レスポンス先頭 (`Unexpected token 'A'...` などのデバッグ用)
+      detail?: string;
+    };
+
+// 1 回の GAS 呼び出しで消化できないほどタブが多いシート (150+ タブ) では、
+// GAS が timedOut=true を返す。その場合クライアント側で同じリクエストを再送し、
+// GAS の skip-existing ロジックに乗せて残りを処理させる。無限ループを避けるため
+// 上限は 8 回 (合計 40 分相当 = 300s × 8)。
+const MAX_AUTO_RETRIES = 8;
 
 export default function MonthlySheetsListView({
   title,
@@ -160,46 +177,79 @@ export default function MonthlySheetsListView({
     // サブフォルダ名: "2026年7月SATTOU請求書" / "2026年7月SATTOU口座振替"
     const subfolderName = `${monthLabel}SATTOU${pdfNamePrefix}`;
 
-    setBulkPdf({ status: "running", monthKey });
-    try {
-      const res = await fetch("/api/bulk-pdf-export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sheetUrl,
-          folderUrl,
-          fileNamePrefix,
-          subfolderName,
-          excludeHidden: true,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
+    // GAS を 1 回呼び出す。timedOut=true の間は最大 MAX_AUTO_RETRIES 回まで
+    // 自動で叩き直し、GAS 側の skip-existing で残りだけを処理させる。
+    let round = 0;
+    let lastData:
+      | {
+          folderUrl?: string;
+          total?: number;
+          successCount?: number;
+          errorCount?: number;
+          skippedExisting?: number;
+          timedOut?: boolean;
+          results?: Array<{
+            tabName: string;
+            fileName: string;
+            fileUrl?: string;
+            error?: string;
+            skipped?: boolean;
+          }>;
+        }
+      | null = null;
+
+    while (round < MAX_AUTO_RETRIES) {
+      round += 1;
+      setBulkPdf({ status: "running", monthKey, round });
+      try {
+        const res = await fetch("/api/bulk-pdf-export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sheetUrl,
+            folderUrl,
+            fileNamePrefix,
+            subfolderName,
+            excludeHidden: true,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          setBulkPdf({
+            status: "error",
+            monthKey,
+            message: data.error ?? `HTTP ${res.status}`,
+            detail: data.detail,
+          });
+          return;
+        }
+        lastData = data;
+        // 全タブ処理完了 (timedOut=false)。ループ終了して success へ。
+        if (!data.timedOut) break;
+        // タイムアウトで続きあり。次のラウンドで残りを処理する (GAS skip-existing に任せる)。
+      } catch (err) {
         setBulkPdf({
           status: "error",
           monthKey,
-          message: data.error ?? `HTTP ${res.status}`,
+          message: err instanceof Error ? err.message : "Unknown error",
         });
         return;
       }
-      setBulkPdf({
-        status: "success",
-        monthKey,
-        folderUrl: data.folderUrl,
-        total: data.total ?? 0,
-        successCount: data.successCount ?? 0,
-        errorCount: data.errorCount ?? 0,
-        skippedExisting: data.skippedExisting ?? 0,
-        timedOut: !!data.timedOut,
-        results: data.results ?? [],
-      });
-    } catch (err) {
-      setBulkPdf({
-        status: "error",
-        monthKey,
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
     }
+
+    if (!lastData) return;
+    setBulkPdf({
+      status: "success",
+      monthKey,
+      folderUrl: lastData.folderUrl ?? "",
+      total: lastData.total ?? 0,
+      successCount: lastData.successCount ?? 0,
+      errorCount: lastData.errorCount ?? 0,
+      skippedExisting: lastData.skippedExisting ?? 0,
+      // MAX_AUTO_RETRIES 回叩いてもまだ timedOut ならその情報を残す。
+      timedOut: !!lastData.timedOut,
+      results: lastData.results ?? [],
+    });
   };
 
   const months = useMemo(() => {
@@ -497,11 +547,21 @@ export default function MonthlySheetsListView({
           <div className="bg-white rounded-lg p-8 max-w-md w-full space-y-4 shadow-xl text-center">
             <Loader2 className="w-10 h-10 text-brand-600 mx-auto animate-spin" />
             <h3 className="font-semibold text-lg">
-              PDFを出力中...
+              {bulkPdf.round && bulkPdf.round > 1
+                ? `PDFを出力中... (${bulkPdf.round}回目 / 残りを追加処理)`
+                : "PDFを出力中..."}
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed">
               {parseInt(bulkPdf.monthKey.split("-")[1], 10)}月分のスプレッドシートを PDF に変換して Drive に保存しています。
-              50社で約30〜60秒、140社で1〜3分かかります。この画面を閉じずにお待ちください。
+              50社で約30〜60秒、150社で4〜6分かかります。この画面を閉じずにお待ちください。
+              {bulkPdf.round && bulkPdf.round > 1 && (
+                <>
+                  <br />
+                  <span className="text-xs text-slate-500">
+                    GAS の 6 分制限を跨ぐシートなので、残りタブを自動で追加バッチ処理しています。
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -620,11 +680,25 @@ export default function MonthlySheetsListView({
             <div className="text-sm text-rose-800 bg-rose-50 rounded-md p-3 leading-relaxed">
               {bulkPdf.message}
             </div>
+            {bulkPdf.detail && (
+              <details className="text-xs text-slate-700 bg-slate-50 rounded-md p-3">
+                <summary className="cursor-pointer font-medium">
+                  GAS の生レスポンス (先頭500文字) — 原因調査用
+                </summary>
+                <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[11px] text-slate-600">
+                  {bulkPdf.detail}
+                </pre>
+              </details>
+            )}
             <div className="text-xs text-slate-600 leading-relaxed">
               考えられる原因:
               <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li>
+                  GAS Web App のデプロイが古いままになっている
+                  (「デプロイ」→「デプロイを管理」→ 鉛筆 →「新しいバージョン」→「デプロイ」を実行)
+                </li>
                 <li>Vercel の環境変数 SHEETS_GAS_URL_BULK_PDF / SHEETS_GAS_TOKEN_BULK_PDF が未設定</li>
-                <li>GAS Web App が未デプロイ、または URL/TOKEN が違う</li>
+                <li>GAS Web App の URL/TOKEN が違う</li>
                 <li>PDF出力先フォルダに書き込み権限がない</li>
                 <li>スプレッドシートに閲覧権限がない</li>
               </ul>

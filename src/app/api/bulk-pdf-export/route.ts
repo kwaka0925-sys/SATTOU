@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Google Sheets の PDF エクスポート + Drive アップロードは重い処理なので、
-// タイムアウトを長めに確保 (Vercel Pro でも 60s 上限)。
-export const maxDuration = 60;
+// Google Sheets の PDF エクスポート + Drive アップロードは重い処理。
+// 60 タブ超のシート (口座振替 150+ タブなど) では GAS 側が 4.5 分近くまで
+// 走る必要があるので、Vercel Pro の上限 300 秒まで引き上げる。
+// これより短いと、GAS が JSON を返す前に Vercel が 504 を返してしまう。
+export const maxDuration = 300;
 
 type Body = {
   sheetUrl?: string;
