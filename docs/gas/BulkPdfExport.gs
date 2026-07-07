@@ -40,7 +40,15 @@
 const SLEEP_BETWEEN_TABS_MS = 2000;   // レート制限回避のため (2秒間隔で30req/min)
 const MAX_RETRY = 2;                  // 429 エラー時のリトライ回数（合計時間を6分制限内に）
 const RETRY_INITIAL_BACKOFF_MS = 3000; // リトライ待機: 3秒 → 6秒
-const MAX_EXECUTION_MS = 5.5 * 60 * 1000; // GAS の6分制限手前で切り上げ (5分30秒)
+// GAS の 6 分制限の 90 秒手前で切り上げる。以前は 30 秒しか余裕を取っておらず、
+// 巨大シート (60+ タブ) でリトライが発生すると JSON を返す前に強制停止されて
+// HTML の "An error occurred" が返ってしまっていた。90 秒あれば残りをスキップ扱いで
+// results に詰めて JSON で返せる。
+const MAX_EXECUTION_MS = 4.5 * 60 * 1000;
+// リトライ突入前に「あと N ミリ秒切ったら再試行をあきらめる」しきい値。
+// 429 が連発するタブで指数バックオフ (3s → 6s) を回し続けると、
+// 全体タイムアウトを越えて GAS が JSON を返せなくなるので手前で止める。
+const RETRY_DEADLINE_MARGIN_MS = 20 * 1000;
 
 function doPost(e) {
   try {
@@ -96,6 +104,7 @@ function doPost(e) {
     let skippedExisting = 0;
     let timedOut = false;
     const startTime = new Date().getTime();
+    const deadline = startTime + MAX_EXECUTION_MS;
 
     for (var i = 0; i < sheets.length; i++) {
       // 6分制限に達しそうなら早めに切り上げて残りは未処理として返す。
@@ -134,7 +143,7 @@ function doPost(e) {
       }
 
       try {
-        const blob = exportSheetAsPdf_(spreadsheetId, sheet.getSheetId(), oauthToken);
+        const blob = exportSheetAsPdf_(spreadsheetId, sheet.getSheetId(), oauthToken, deadline);
         blob.setName(fileName);
         const file = folder.createFile(blob);
         results.push({
@@ -204,7 +213,9 @@ function getOrCreateSubfolder_(parent, name) {
 
 // 特定タブを PDF ブロブとして取得。429 (Too Many Requests) は
 // 指数バックオフで再試行し、Google のレート制限を吸収する。
-function exportSheetAsPdf_(spreadsheetId, sheetId, oauthToken) {
+// deadline (ms epoch) を渡すと、リトライ用のスリープでその手前を越えそうな場合は
+// 諦めて即エラーを返す (親ループが「タイムアウトスキップ」として JSON に詰められる)。
+function exportSheetAsPdf_(spreadsheetId, sheetId, oauthToken, deadline) {
   const exportUrl =
     'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export' +
     '?format=pdf' +
@@ -222,8 +233,16 @@ function exportSheetAsPdf_(spreadsheetId, sheetId, oauthToken) {
   var lastMessage = '';
   for (var attempt = 0; attempt <= MAX_RETRY; attempt++) {
     if (attempt > 0) {
-      // 指数バックオフ: 2秒 → 4秒 → 8秒 → 16秒 → 32秒
-      Utilities.sleep(RETRY_INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1));
+      // 指数バックオフ: 3秒 → 6秒
+      var backoff = RETRY_INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+      // deadline を越えそうならリトライを打ち切って親ループへ戻し、
+      // 残りタブはスキップ扱いで JSON に詰めさせる。
+      if (deadline && new Date().getTime() + backoff + RETRY_DEADLINE_MARGIN_MS > deadline) {
+        throw new Error(
+          'PDF export retry skipped (deadline near). Last: HTTP ' + lastCode,
+        );
+      }
+      Utilities.sleep(backoff);
     }
 
     var response = UrlFetchApp.fetch(exportUrl, {
