@@ -198,6 +198,9 @@ export default function MonthlySheetsListView({
         }
       | null = null;
 
+    // エラー継続時の最後の情報 (最終ラウンドまで全部エラーだったら表示に使う)
+    let lastError: { message: string; detail?: string } | null = null;
+
     while (round < MAX_AUTO_RETRIES) {
       round += 1;
       setBulkPdf({ status: "running", monthKey, round });
@@ -215,26 +218,40 @@ export default function MonthlySheetsListView({
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {
-          setBulkPdf({
-            status: "error",
-            monthKey,
+          // GAS が JSON を返せず HTML エラーページを返した (6分の強制停止など) パターン。
+          // このケースは既に何枚か PDF が生成されている可能性が高いので、
+          // 諦めずに次のラウンドで叩き直す。GAS の skip-existing で再処理はされない。
+          lastError = {
             message: data.error ?? `HTTP ${res.status}`,
             detail: data.detail,
-          });
-          return;
+          };
+          continue;
         }
+        // ここに来たら GAS から正常な JSON が返っている。
         lastData = data;
+        lastError = null;
         // 全タブ処理完了 (timedOut=false)。ループ終了して success へ。
         if (!data.timedOut) break;
         // タイムアウトで続きあり。次のラウンドで残りを処理する (GAS skip-existing に任せる)。
       } catch (err) {
-        setBulkPdf({
-          status: "error",
-          monthKey,
+        // fetch 自体のネットワーク失敗など。これも次ラウンドで再試行。
+        lastError = {
           message: err instanceof Error ? err.message : "Unknown error",
-        });
-        return;
+        };
+        continue;
       }
+    }
+
+    // 全ラウンド叩き切ったが 1 度も成功しなかった場合のみエラー表示。
+    // 1 度でも成功していれば lastData に入っているので success モーダルへ流す。
+    if (!lastData && lastError) {
+      setBulkPdf({
+        status: "error",
+        monthKey,
+        message: lastError.message,
+        detail: lastError.detail,
+      });
+      return;
     }
 
     if (!lastData) return;
