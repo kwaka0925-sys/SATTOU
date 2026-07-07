@@ -118,6 +118,98 @@ function doGet(e) {
   return jsonResponse({ month, sheet: match.getName(), rows });
 }
 
+// 書き込み許可する列。UI が触るドロップダウン/テキスト入力のみを対象にし、
+// 集計計算などが入る列 (金額, 広告費, 運用代行費など) は誤書き込み防止のため除外。
+const WRITEABLE_FIELDS = {
+  paymentMethod: COLUMN_INDEX.paymentMethod,        // D: 振替 / 請求書
+  progress: COLUMN_INDEX.progress,                  // H: 進捗確認
+  bankTransferProgress: COLUMN_INDEX.bankTransferProgress, // N: 口座振替進捗
+  note: COLUMN_INDEX.note,                          // O: メモ
+  subscriptionStatus: COLUMN_INDEX.subscriptionStatus, // P: 継続
+  marketer: COLUMN_INDEX.marketer,                  // Q: 担当
+};
+
+// UI から呼ばれるセル更新 API。
+// リクエスト: { token, action: "updateCell", month, subscriberId, field, value }
+// レスポンス: { ok: true, sheet, rowIndex, column } / { error: "..." }
+function doPost(e) {
+  var params;
+  try {
+    params = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return jsonResponse({ error: 'invalid JSON body' });
+  }
+
+  const expected = PropertiesService.getScriptProperties().getProperty('TOKEN');
+  if (!expected || params.token !== expected) {
+    return jsonResponse({ error: 'unauthorized' });
+  }
+
+  if (params.action !== 'updateCell') {
+    return jsonResponse({ error: 'unknown action: ' + params.action });
+  }
+
+  const month = String(params.month || '').trim();
+  const subscriberId = String(params.subscriberId || '').trim();
+  const field = String(params.field || '').trim();
+  // value は null/undefined を空文字扱いにする (メモクリアなど)
+  const value = params.value == null ? '' : String(params.value);
+
+  if (!month || !subscriberId || !field) {
+    return jsonResponse({
+      error: 'month, subscriberId, field are required',
+    });
+  }
+  if (!WRITEABLE_FIELDS.hasOwnProperty(field)) {
+    return jsonResponse({ error: 'field not writeable: ' + field });
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = resolveSheet_(ss, month);
+  if (!sheet) {
+    return jsonResponse({ error: 'sheet not found for ' + month });
+  }
+
+  const rowIndex = findRowBySubscriberId_(sheet, subscriberId);
+  if (rowIndex < 0) {
+    return jsonResponse({
+      error: 'subscriberId not found in sheet: ' + subscriberId,
+    });
+  }
+
+  const col = WRITEABLE_FIELDS[field];
+  sheet.getRange(rowIndex, col).setValue(value);
+  return jsonResponse({
+    ok: true,
+    sheet: sheet.getName(),
+    rowIndex: rowIndex,
+    column: col,
+  });
+}
+
+// 加入者識別番号 (E列) からデータ行を探す。見つからなければ -1。
+// 数値 ID / 文字列 ID どちらでも一致するように文字列比較 + 前後空白除去。
+function findRowBySubscriberId_(sheet, subscriberId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return -1;
+  const range = sheet.getRange(
+    DATA_START_ROW,
+    COLUMN_INDEX.subscriberId,
+    lastRow - DATA_START_ROW + 1,
+    1,
+  );
+  const values = range.getValues();
+  const target = String(subscriberId).trim();
+  for (var i = 0; i < values.length; i++) {
+    var v = values[i][0];
+    if (v == null || v === '') continue;
+    if (String(v).trim() === target) {
+      return DATA_START_ROW + i;
+    }
+  }
+  return -1;
+}
+
 function currentMonth_() {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, '0');

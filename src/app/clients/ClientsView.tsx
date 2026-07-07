@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
@@ -133,8 +133,65 @@ export default function ClientsView({
     }
   }, []);
 
+  // Sheet 側への双方向同期の状態管理。キーは `${subscriberId}:${field}`。
+  //   saving = リクエスト送信中 (青いドット)
+  //   error  = 直近の書き込みが失敗 (赤いドット)
+  //   なし    = 同期済み or ローカルのみ (通常表示)
+  type SyncStatus = "saving" | "error";
+  const [syncState, setSyncState] = useState<Record<string, SyncStatus>>({});
+  // note (テキスト入力) はキー打つたびに API を呼ばず、400ms 静止で送る。
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // /api/invoices/update を叩いてシートのセルを更新する。
+  // subscriberId が空の行 (加入者識別番号未設定) は同期スキップ。
+  const syncField = useCallback(
+    async (subscriberId: string, field: EditableField, value: string) => {
+      const key = `${subscriberId}:${field}`;
+      setSyncState((prev) => ({ ...prev, [key]: "saving" }));
+      try {
+        const res = await fetch("/api/invoices/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ month, subscriberId, field, value }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!res.ok || data.error) {
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
+        setSyncState((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      } catch (err) {
+        setSyncState((prev) => ({ ...prev, [key]: "error" }));
+        showToast(
+          `シートへの保存に失敗しました (${field}): ${
+            err instanceof Error ? err.message : "不明なエラー"
+          }`,
+        );
+      }
+    },
+    [month, showToast],
+  );
+
   const updateOverride = useCallback(
-    (id: string, field: EditableField, value: string) => {
+    (
+      id: string,
+      field: EditableField,
+      value: string,
+      subscriberId?: string | null,
+    ) => {
       setOverrides((prev) => {
         const rowPrev = prev[id] ?? {};
         const rowNext: RowOverride = { ...rowPrev };
@@ -152,9 +209,52 @@ export default function ClientsView({
         persistOverrides(next);
         return next;
       });
+
+      // シートへの書き戻し。加入者識別番号がない行は同期スキップ (ローカルのみ)。
+      const sid = subscriberId?.trim();
+      if (!sid) return;
+      const dkey = `${sid}:${field}`;
+      // メモは連続入力するので debounce。ドロップダウンは即時送信。
+      if (field === "note") {
+        clearTimeout(debounceTimers.current[dkey]);
+        debounceTimers.current[dkey] = setTimeout(() => {
+          syncField(sid, field, value);
+        }, 400);
+      } else {
+        syncField(sid, field, value);
+      }
     },
-    [persistOverrides],
+    [persistOverrides, syncField],
   );
+
+  // マウント時に登録した debounce timer をアンマウント時にクリア。
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach((t) => clearTimeout(t));
+    };
+  }, []);
+
+  // セル横に添える 3px の状態ドット。同期中は青、失敗は赤、通常は非表示。
+  const SyncDot = ({
+    subscriberId,
+    field,
+  }: {
+    subscriberId?: string | null;
+    field: EditableField;
+  }) => {
+    if (!subscriberId) return null;
+    const status = syncState[`${subscriberId.trim()}:${field}`];
+    if (!status) return null;
+    return (
+      <span
+        aria-label={status === "saving" ? "保存中" : "保存に失敗しました"}
+        title={status === "saving" ? "シートに保存中..." : "シート保存に失敗しました"}
+        className={`inline-block w-1.5 h-1.5 rounded-full ml-1 align-middle ${
+          status === "saving" ? "bg-sky-400 animate-pulse" : "bg-rose-500"
+        }`}
+      />
+    );
+  };
 
   const effectivePaymentMethod = useCallback(
     (r: SheetInvoice): string => {
@@ -466,6 +566,11 @@ export default function ClientsView({
           {copyToast}
         </div>
       )}
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white text-xs px-4 py-2 rounded-md shadow-lg max-w-md">
+          {toast}
+        </div>
+      )}
       {reorderTarget && (
         <ReorderDialog
           sourceName={reorderTarget}
@@ -622,7 +727,12 @@ export default function ClientsView({
                         <select
                           value={rowPm}
                           onChange={(e) =>
-                            updateOverride(r.id, "paymentMethod", e.target.value)
+                            updateOverride(
+                              r.id,
+                              "paymentMethod",
+                              e.target.value,
+                              r.subscriberId,
+                            )
                           }
                           className={`text-xs rounded-md border px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${pmCls}`}
                         >
@@ -630,6 +740,10 @@ export default function ClientsView({
                           <option value="振替">口座振替</option>
                           <option value="請求書">請求書</option>
                         </select>
+                        <SyncDot
+                          subscriberId={r.subscriberId}
+                          field="paymentMethod"
+                        />
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {r.subscriberId ?? "—"}
@@ -642,7 +756,12 @@ export default function ClientsView({
                         <select
                           value={rowProgress}
                           onChange={(e) =>
-                            updateOverride(r.id, "progress", e.target.value)
+                            updateOverride(
+                              r.id,
+                              "progress",
+                              e.target.value,
+                              r.subscriberId,
+                            )
                           }
                           className={`text-xs rounded-md border px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 ${progressCls(rowProgress)}`}
                         >
@@ -653,6 +772,7 @@ export default function ClientsView({
                             </option>
                           ))}
                         </select>
+                        <SyncDot subscriberId={r.subscriberId} field="progress" />
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {r.bankTransferProgress ?? "—"}
@@ -665,6 +785,7 @@ export default function ClientsView({
                               r.id,
                               "subscriptionStatus",
                               e.target.value,
+                              r.subscriberId,
                             )
                           }
                           className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
@@ -676,12 +797,21 @@ export default function ClientsView({
                             </option>
                           ))}
                         </select>
+                        <SyncDot
+                          subscriberId={r.subscriberId}
+                          field="subscriptionStatus"
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <select
                           value={rowMarketer}
                           onChange={(e) =>
-                            updateOverride(r.id, "marketer", e.target.value)
+                            updateOverride(
+                              r.id,
+                              "marketer",
+                              e.target.value,
+                              r.subscriberId,
+                            )
                           }
                           className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
                         >
@@ -696,17 +826,24 @@ export default function ClientsView({
                               <option value={rowMarketer}>{rowMarketer}</option>
                             )}
                         </select>
+                        <SyncDot subscriberId={r.subscriberId} field="marketer" />
                       </td>
                       <td className="px-4 py-3">
                         <input
                           type="text"
                           value={rowNote}
                           onChange={(e) =>
-                            updateOverride(r.id, "note", e.target.value)
+                            updateOverride(
+                              r.id,
+                              "note",
+                              e.target.value,
+                              r.subscriberId,
+                            )
                           }
                           placeholder="メモを入力"
                           className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-brand-300"
                         />
+                        <SyncDot subscriberId={r.subscriberId} field="note" />
                       </td>
                     </tr>
                   );
