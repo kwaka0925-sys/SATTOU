@@ -5,6 +5,7 @@ import Link from "next/link";
 import TopBar from "./TopBar";
 import {
   ArrowLeft,
+  Download,
   ExternalLink,
   RefreshCw,
   AlertTriangle,
@@ -34,6 +35,32 @@ function toEmbedUrl(editUrl: string): string {
   }
 }
 
+// スプレッドシートIDを抽出し、直接PDFエクスポートするURLに変換。
+// 埋め込みモードではファイルメニューが動かないため、
+// PDF出力だけは export エンドポイント経由で1クリックで実行できるようにする。
+function toPdfExportUrl(editUrl: string): string | null {
+  try {
+    const u = new URL(editUrl);
+    // https://docs.google.com/spreadsheets/d/<ID>/edit?...
+    const match = u.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+    if (!match) return null;
+    const id = match[1];
+    // 現在のタブ (gid) を維持
+    const gid =
+      u.searchParams.get("gid") ??
+      u.hash.match(/gid=(\d+)/)?.[1] ??
+      null;
+    const exportUrl = new URL(
+      `https://docs.google.com/spreadsheets/d/${id}/export`,
+    );
+    exportUrl.searchParams.set("format", "pdf");
+    if (gid) exportUrl.searchParams.set("gid", gid);
+    return exportUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function EmbeddedSheetView({
   title,
   subtitle,
@@ -43,6 +70,7 @@ export default function EmbeddedSheetView({
 }: Props) {
   const [iframeKey, setIframeKey] = useState(0);
   const embedUrl = toEmbedUrl(editUrl);
+  const pdfUrl = toPdfExportUrl(editUrl);
 
   return (
     <div className="h-screen flex flex-col">
@@ -60,8 +88,7 @@ export default function EmbeddedSheetView({
           )}
           <div className="flex items-center gap-2 text-xs text-amber-800">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
-            埋め込みが表示されない場合は Google
-            アカウントでログインしているか、シートの共有設定をご確認ください。
+            埋め込みではメニュー操作（ファイル・PDF出力等）は制限されます。フル機能は「新しいタブで開く」から。
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -72,6 +99,18 @@ export default function EmbeddedSheetView({
             <RefreshCw className="w-3 h-3" />
             再読み込み
           </button>
+          {pdfUrl && (
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="btn-ghost inline-flex items-center gap-2 text-xs"
+              title="現在のタブをPDFとしてダウンロード"
+            >
+              <Download className="w-3 h-3" />
+              PDF出力
+            </a>
+          )}
           <a
             href={editUrl}
             target="_blank"
