@@ -241,8 +241,8 @@ export default function SystemMigrationView({
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-sm text-slate-500">白紙</div>
-            <div className="text-2xl font-semibold mt-1 text-slate-700">
+            <div className="text-sm text-rose-600">未実施</div>
+            <div className="text-2xl font-semibold mt-1 text-rose-700">
               {num(totals.blank)}
             </div>
           </div>
@@ -272,7 +272,7 @@ export default function SystemMigrationView({
           >
             <option value="all">状態すべて</option>
             <option value="completed">移行完了</option>
-            <option value="blank">白紙</option>
+            <option value="blank">未実施</option>
           </select>
         </div>
       </div>
@@ -345,10 +345,10 @@ export default function SystemMigrationView({
                             className={`pill ${
                               status.completed
                                 ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
-                                : "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                                : "bg-rose-100 text-rose-700 ring-1 ring-rose-200"
                             }`}
                           >
-                            {status.completed ? "完了" : "白紙"}
+                            {status.completed ? "完了" : "未実施"}
                           </span>
                         </label>
                       </td>
