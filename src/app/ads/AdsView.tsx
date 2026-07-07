@@ -63,12 +63,12 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
     totals.adSpend > 0 ? totals.feeIncTax / totals.adSpend : 0;
 
   return (
-    <div>
+    <div className="h-screen flex flex-col">
       <TopBar
         title="運用代行売上"
         subtitle={`${monthTitle(month)} · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
       />
-      <div className="p-6 space-y-4">
+      <div className="shrink-0 p-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-sm text-slate-500">月表示</div>
           <MonthPicker current={month} />
@@ -135,13 +135,14 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
             </>
           )}
         </div>
-
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+      </div>
+      <div className="flex-1 min-h-0 px-6 pb-6">
+        <div className="card h-full flex flex-col overflow-hidden">
+          <div className="overflow-auto flex-1">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
-                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-10 min-w-[180px]">
+                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px]">
                     サロン名
                   </th>
                   <th className="text-left font-medium px-4 py-3">担当</th>
