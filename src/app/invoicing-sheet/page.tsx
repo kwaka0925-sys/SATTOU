@@ -1,14 +1,24 @@
-import EmbeddedSheetView from "@/components/EmbeddedSheetView";
+import MonthlySheetsListView from "@/components/MonthlySheetsListView";
 
-const EDIT_URL =
-  "https://docs.google.com/spreadsheets/d/1rG1hSpd_Z7VKOCMfwhPik-QTH1e3ynD4mX6y0mqQeSw/edit?gid=1844006118#gid=1844006118";
+type SearchParams = { year?: string };
 
-export default function InvoicingSheetPage() {
+export default function InvoicingSheetPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const currentYear = new Date().getFullYear();
+  const year = parseInt(
+    searchParams?.year ?? String(currentYear),
+    10,
+  );
   return (
-    <EmbeddedSheetView
+    <MonthlySheetsListView
       title="請求書作成用スプシ"
-      subtitle="各クライアントの請求書金額を作成するスプレッドシート"
-      editUrl={EDIT_URL}
+      subtitle="月ごとに請求書作成スプレッドシートを管理"
+      basePath="/invoicing-sheet"
+      storageKey="sattou-invoicing-sheets"
+      year={Number.isFinite(year) ? year : currentYear}
     />
   );
 }

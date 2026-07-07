@@ -1,14 +1,24 @@
-import EmbeddedSheetView from "@/components/EmbeddedSheetView";
+import MonthlySheetsListView from "@/components/MonthlySheetsListView";
 
-const EDIT_URL =
-  "https://docs.google.com/spreadsheets/d/1esBZyZCjuZe4cb0-5--oBMEGdcfQ4coU3KsIz6bOuNI/edit?gid=755722710#gid=755722710";
+type SearchParams = { year?: string };
 
-export default function BankTransferSheetPage() {
+export default function BankTransferSheetPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const currentYear = new Date().getFullYear();
+  const year = parseInt(
+    searchParams?.year ?? String(currentYear),
+    10,
+  );
   return (
-    <EmbeddedSheetView
+    <MonthlySheetsListView
       title="口座振替用スプシ"
-      subtitle="口座振替の管理スプレッドシート"
-      editUrl={EDIT_URL}
+      subtitle="月ごとに口座振替スプレッドシートを管理"
+      basePath="/bank-transfer-sheet"
+      storageKey="sattou-bank-transfer-sheets"
+      year={Number.isFinite(year) ? year : currentYear}
     />
   );
 }
