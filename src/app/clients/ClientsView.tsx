@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
-import { AlertTriangle, ArrowUpDown, Copy, Filter, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Copy,
+  Filter,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import type { InvoicePaymentMethod } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
 import {
@@ -152,8 +160,15 @@ export default function ClientsView({
 
   // /api/invoices/update を叩いてシートのセルを更新する。
   // subscriberId が空の行 (加入者識別番号未設定) は同期スキップ。
+  // 成功したらローカル override を削除し、シートを唯一の情報源にする
+  // (シートが直接編集された場合に画面が古い値を掴み続ける事故を防ぐ)。
   const syncField = useCallback(
-    async (subscriberId: string, field: EditableField, value: string) => {
+    async (
+      id: string,
+      subscriberId: string,
+      field: EditableField,
+      value: string,
+    ) => {
       const key = `${subscriberId}:${field}`;
       setSyncState((prev) => ({ ...prev, [key]: "saving" }));
       try {
@@ -173,16 +188,33 @@ export default function ClientsView({
           delete next[key];
           return next;
         });
+        // シートへの反映が確定したので、対応するローカル override を消す。
+        // 次に再取得すればシートの値がそのまま画面に出るので、
+        // シート直接編集との齟齬が起きなくなる。
+        setOverrides((prev) => {
+          const rowPrev = prev[id];
+          if (!rowPrev || rowPrev[field] === undefined) return prev;
+          const rowNext: RowOverride = { ...rowPrev };
+          delete rowNext[field];
+          const next: OverridesMap = { ...prev };
+          if (Object.keys(rowNext).length === 0) {
+            delete next[id];
+          } else {
+            next[id] = rowNext;
+          }
+          persistOverrides(next);
+          return next;
+        });
       } catch (err) {
         setSyncState((prev) => ({ ...prev, [key]: "error" }));
         showToast(
           `シートへの保存に失敗しました (${field}): ${
             err instanceof Error ? err.message : "不明なエラー"
-          }`,
+          }。GAS の doPost が古い可能性があります。デプロイを再作成してください。`,
         );
       }
     },
-    [month, showToast],
+    [month, persistOverrides, showToast],
   );
 
   const updateOverride = useCallback(
@@ -218,10 +250,10 @@ export default function ClientsView({
       if (field === "note") {
         clearTimeout(debounceTimers.current[dkey]);
         debounceTimers.current[dkey] = setTimeout(() => {
-          syncField(sid, field, value);
+          syncField(id, sid, field, value);
         }, 400);
       } else {
-        syncField(sid, field, value);
+        syncField(id, sid, field, value);
       }
     },
     [persistOverrides, syncField],
@@ -233,6 +265,27 @@ export default function ClientsView({
       Object.values(debounceTimers.current).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // シートを直接編集した内容を sattou 側に反映するためのリフレッシュ。
+  // Server Component (page.tsx) をサーバー側で再実行して最新シートを取り込む。
+  const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    router.refresh();
+    // Next.js の refresh は同期的な完了通知がないので、体感的に短めのタイマーで解除する。
+    setTimeout(() => setRefreshing(false), 1200);
+  }, [router]);
+
+  // 「別タブでシート編集 → sattou タブに戻る」を検知して自動再取得。
+  // 常時ポーリングだと GAS を叩きすぎるので、フォーカスイベントのみに絞る。
+  useEffect(() => {
+    const onFocus = () => {
+      router.refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [router]);
 
   // セル横に添える 3px の状態ドット。同期中は青、失敗は赤、通常は非表示。
   const SyncDot = ({
@@ -427,7 +480,21 @@ export default function ClientsView({
       <div className="shrink-0 p-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-sm text-slate-500">月表示</div>
-          <MonthPicker current={month} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-brand-700 border border-slate-200 rounded-md px-2 py-1 disabled:opacity-60"
+              title="スプレッドシートを直接編集した内容を取り込むために手動再取得"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+              />
+              シート更新
+            </button>
+            <MonthPicker current={month} />
+          </div>
         </div>
         {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
