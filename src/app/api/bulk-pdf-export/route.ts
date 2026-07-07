@@ -10,12 +10,19 @@ type Body = {
   sheetUrl?: string;
   folderUrl?: string;
   fileNamePrefix?: string;
+  subfolderName?: string;
   excludeHidden?: boolean;
 };
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Body;
-  const { sheetUrl, folderUrl, fileNamePrefix, excludeHidden } = body;
+  const {
+    sheetUrl,
+    folderUrl,
+    fileNamePrefix,
+    subfolderName,
+    excludeHidden,
+  } = body;
 
   if (!sheetUrl || !folderUrl || !fileNamePrefix) {
     return NextResponse.json(
@@ -48,6 +55,7 @@ export async function POST(req: NextRequest) {
         sheetUrl,
         folderUrl,
         fileNamePrefix,
+        subfolderName: subfolderName ?? "",
         excludeHidden: excludeHidden !== false,
       }),
       // GAS 側で数秒〜数分かかる可能性があるのでキャッシュ無効

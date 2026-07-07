@@ -11,7 +11,11 @@
  *       "token": "<SCRIPT_TOKEN と同じ文字列>",
  *       "sheetUrl": "<PDF化したいスプレッドシートのURL>",
  *       "folderUrl": "<PDF保存先のGoogle DriveフォルダURL>",
- *       "fileNamePrefix": "2026年7月請求書",   // 例
+ *       "fileNamePrefix": "2026年7月請求書",     // 例。PDFのファイル名接頭辞
+ *       "subfolderName": "2026年7月発送請求書", // 任意。指定するとその名前で
+ *                                               // サブフォルダを作成し、
+ *                                               // 全PDFをそこへ保存する
+ *                                               // (同名フォルダがあれば再利用)
  *       "excludeHidden": true                    // 非表示タブを除外するか
  *     }
  *
@@ -49,6 +53,7 @@ function doPost(e) {
     const sheetUrl = params.sheetUrl;
     const folderUrl = params.folderUrl;
     const fileNamePrefix = String(params.fileNamePrefix || 'PDF出力');
+    const subfolderName = String(params.subfolderName || '');
     const excludeHidden = params.excludeHidden !== false;
 
     if (!sheetUrl || !folderUrl) {
@@ -64,12 +69,18 @@ function doPost(e) {
       });
     }
 
-    const folder = openFolder_(folderUrl);
-    if (!folder) {
+    const parentFolder = openFolder_(folderUrl);
+    if (!parentFolder) {
       return jsonResponse_({
         error: '保存先フォルダを開けませんでした。URL と共有設定を確認してください。',
       });
     }
+
+    // サブフォルダ名が指定されていれば、その名前のフォルダを親の中に用意する。
+    // 同名フォルダが既にあれば再利用 (今月分の追加出力にも対応)。
+    const folder = subfolderName
+      ? getOrCreateSubfolder_(parentFolder, subfolderName)
+      : parentFolder;
 
     const spreadsheetId = spreadsheet.getId();
     const sheets = spreadsheet.getSheets().filter(function (s) {
@@ -143,6 +154,14 @@ function openFolder_(urlOrId) {
   } catch (err) {
     return null;
   }
+}
+
+// 親フォルダの中に指定名のサブフォルダを取得。存在しなければ作成する。
+// 同名フォルダが複数ある場合は最初に見つかったものを返す。
+function getOrCreateSubfolder_(parent, name) {
+  var existing = parent.getFoldersByName(name);
+  if (existing.hasNext()) return existing.next();
+  return parent.createFolder(name);
 }
 
 // 特定タブを PDF ブロブとして取得。429 (Too Many Requests) は

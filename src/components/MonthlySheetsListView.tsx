@@ -154,6 +154,8 @@ export default function MonthlySheetsListView({
     const [y, m] = monthKey.split("-");
     const monthLabel = `${y}年${parseInt(m, 10)}月`;
     const fileNamePrefix = `${monthLabel}${pdfNamePrefix}`;
+    // サブフォルダ名: "2026年7月発送請求書" / "2026年7月発送口座振替"
+    const subfolderName = `${monthLabel}発送${pdfNamePrefix}`;
 
     setBulkPdf({ status: "running", monthKey });
     try {
@@ -164,6 +166,7 @@ export default function MonthlySheetsListView({
           sheetUrl,
           folderUrl,
           fileNamePrefix,
+          subfolderName,
           excludeHidden: true,
         }),
       });
@@ -444,6 +447,15 @@ export default function MonthlySheetsListView({
                 </span>
               </div>
               <div>
+                <span className="text-slate-500">サブフォルダ: </span>
+                <span className="font-mono text-xs">
+                  {`${bulkPdf.monthKey.split("-")[0]}年${parseInt(bulkPdf.monthKey.split("-")[1], 10)}月発送${pdfNamePrefix}`}
+                </span>
+                <span className="text-[10px] text-slate-500 ml-1">
+                  (親フォルダ内に自動作成)
+                </span>
+              </div>
+              <div>
                 <span className="text-slate-500">保存先: </span>
                 <a
                   href={folderUrl}
@@ -451,7 +463,7 @@ export default function MonthlySheetsListView({
                   rel="noreferrer noopener"
                   className="text-brand-700 hover:underline text-xs"
                 >
-                  設定済みフォルダを開く
+                  設定済み親フォルダを開く
                 </a>
               </div>
               <div className="text-xs text-slate-500 leading-relaxed">
