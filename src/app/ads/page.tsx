@@ -1,6 +1,6 @@
 import {
   fetchInvoicesFromSheetWithMeta,
-  currentMonth,
+  currentBillingMonth,
   isBackendConfigured,
 } from "@/lib/sheets";
 import AdsView from "./AdsView";
@@ -14,7 +14,7 @@ export default async function AdsPage({
 }: {
   searchParams?: SearchParams;
 }) {
-  const month = searchParams?.month ?? currentMonth();
+  const month = searchParams?.month ?? currentBillingMonth();
   const result = await fetchInvoicesFromSheetWithMeta(month);
   const configured = isBackendConfigured("billing");
   return (

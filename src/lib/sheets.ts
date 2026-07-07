@@ -59,6 +59,15 @@ export function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// ダッシュボード・請求書・広告売上のデフォルト月。
+// 「今月の稼働分は翌月請求」の運用に合わせて、常に翌月を返す。
+// 例: 今日が 2026-07-07 → 2026-08 (「2026年8月分（7月稼働分）」)
+export function currentBillingMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function monthRange(month: string): { issueDate: string; dueDate: string } {
   const [y, m] = month.split("-").map((s) => parseInt(s, 10));
   const last = new Date(y, m, 0).getDate();

@@ -141,13 +141,38 @@ export default function AdsView({
     }
   };
 
-  const applyPreset = (kind: "op-month" | "last7" | "last30" | "this-month") => {
+  const applyPreset = (
+    kind:
+      | "op-month"
+      | "this-month"
+      | "last-month"
+      | "last7"
+      | "last30",
+  ) => {
     const today = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     if (kind === "op-month") {
       const r = operatingMonthRange(month);
       setSince(r.since);
       setUntil(r.until);
+    } else if (kind === "this-month") {
+      const y = today.getFullYear();
+      const m = today.getMonth() + 1;
+      const last = new Date(y, m, 0).getDate();
+      const mm = String(m).padStart(2, "0");
+      setSince(`${y}-${mm}-01`);
+      setUntil(`${y}-${mm}-${String(last).padStart(2, "0")}`);
+    } else if (kind === "last-month") {
+      // 今月の1日 → 1日前 = 先月末 という Date 数値化で
+      // 年またぎ（1月→12月）も自然に処理する
+      const firstOfThis = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastOfPrev = new Date(firstOfThis.getTime() - 24 * 60 * 60 * 1000);
+      const prevY = lastOfPrev.getFullYear();
+      const prevM = lastOfPrev.getMonth() + 1;
+      const mm = String(prevM).padStart(2, "0");
+      const last = new Date(prevY, prevM, 0).getDate();
+      setSince(`${prevY}-${mm}-01`);
+      setUntil(`${prevY}-${mm}-${String(last).padStart(2, "0")}`);
     } else if (kind === "last7") {
       const from = new Date(today);
       from.setDate(from.getDate() - 6);
@@ -158,13 +183,6 @@ export default function AdsView({
       from.setDate(from.getDate() - 29);
       setSince(iso(from));
       setUntil(iso(today));
-    } else if (kind === "this-month") {
-      const y = today.getFullYear();
-      const m = today.getMonth() + 1;
-      const last = new Date(y, m, 0).getDate();
-      const mm = String(m).padStart(2, "0");
-      setSince(`${y}-${mm}-01`);
-      setUntil(`${y}-${mm}-${String(last).padStart(2, "0")}`);
     }
   };
 
@@ -337,6 +355,14 @@ export default function AdsView({
                 className="text-[11px] text-brand-700 hover:underline px-1"
               >
                 今月
+              </button>
+              <span className="text-slate-300">·</span>
+              <button
+                type="button"
+                onClick={() => applyPreset("last-month")}
+                className="text-[11px] text-brand-700 hover:underline px-1"
+              >
+                先月
               </button>
               <span className="text-slate-300">·</span>
               <button

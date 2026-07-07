@@ -11,7 +11,7 @@ import StatCard from "@/components/StatCard";
 import MonthPicker from "@/components/MonthPicker";
 import ActivityTiles from "@/components/ActivityTiles";
 import { num, yen } from "@/lib/format";
-import { fetchDashboardTotals, currentMonth } from "@/lib/sheets";
+import { fetchDashboardTotals, currentBillingMonth } from "@/lib/sheets";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ export default async function Page({
 }: {
   searchParams?: SearchParams;
 }) {
-  const month = searchParams?.month ?? currentMonth();
+  const month = searchParams?.month ?? currentBillingMonth();
   const sheetTotals = await fetchDashboardTotals(month);
   const hasData = sheetTotals.configured && sheetTotals.customerCount > 0;
 
