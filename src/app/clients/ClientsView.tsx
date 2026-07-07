@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
-import { AlertTriangle, Filter, Search } from "lucide-react";
+import { AlertTriangle, Copy, Filter, Search } from "lucide-react";
 import type { InvoicePaymentMethod } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
 
@@ -252,6 +252,40 @@ export default function ClientsView({
     effectiveMarketer,
   ]);
 
+  // 列コピー: フィルタ後の順序をそのまま縦一列でクリップボードに載せる。
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const copyColumn = async (
+    values: Array<string | number | null | undefined>,
+    label: string,
+  ) => {
+    const text = values
+      .map((v) => (v == null || v === "" ? "" : String(v)))
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyToast(`${label} を ${values.length} 件コピーしました`);
+    } catch {
+      setCopyToast("コピーに失敗しました（HTTPSまたは権限を確認）");
+    }
+    setTimeout(() => setCopyToast(null), 2500);
+  };
+  const HeaderCopyButton = ({
+    onClick,
+    title,
+  }: {
+    onClick: () => void;
+    title: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-slate-400 hover:text-brand-700 transition-colors ml-1 align-middle"
+      title={title}
+    >
+      <Copy className="w-3 h-3 inline" />
+    </button>
+  );
+
   const totals = filtered.reduce(
     (acc, r) => {
       const rowPm = effectivePaymentMethod(r);
@@ -416,6 +450,11 @@ export default function ClientsView({
           )}
         </div>
       </div>
+      {copyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-4 py-2 rounded-md shadow-lg">
+          {copyToast}
+        </div>
+      )}
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
@@ -424,13 +463,77 @@ export default function ClientsView({
                 <tr>
                   <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px]">
                     サロン名
+                    <HeaderCopyButton
+                      title="サロン名を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.clientName),
+                          "サロン名",
+                        )
+                      }
+                    />
                   </th>
-                  <th className="text-right font-medium px-4 py-3">ブランド数</th>
-                  <th className="text-right font-medium px-4 py-3">店舗数</th>
+                  <th className="text-right font-medium px-4 py-3">
+                    ブランド数
+                    <HeaderCopyButton
+                      title="ブランド数を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.brandCount ?? ""),
+                          "ブランド数",
+                        )
+                      }
+                    />
+                  </th>
+                  <th className="text-right font-medium px-4 py-3">
+                    店舗数
+                    <HeaderCopyButton
+                      title="店舗数を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.storeCount ?? ""),
+                          "店舗数",
+                        )
+                      }
+                    />
+                  </th>
                   <th className="text-left font-medium px-4 py-3">振替 / 請求書</th>
-                  <th className="text-left font-medium px-4 py-3">加入者識別番号</th>
-                  <th className="text-left font-medium px-4 py-3">振込名</th>
-                  <th className="text-right font-medium px-4 py-3">請求金額 (税込)</th>
+                  <th className="text-left font-medium px-4 py-3">
+                    加入者識別番号
+                    <HeaderCopyButton
+                      title="加入者識別番号を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.subscriberId ?? ""),
+                          "加入者識別番号",
+                        )
+                      }
+                    />
+                  </th>
+                  <th className="text-left font-medium px-4 py-3">
+                    振込名
+                    <HeaderCopyButton
+                      title="振込名を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.payeeName ?? ""),
+                          "振込名",
+                        )
+                      }
+                    />
+                  </th>
+                  <th className="text-right font-medium px-4 py-3">
+                    請求金額 (税込)
+                    <HeaderCopyButton
+                      title="請求金額 (税込) を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.amount ?? ""),
+                          "請求金額(税込)",
+                        )
+                      }
+                    />
+                  </th>
                   <th className="text-left font-medium px-4 py-3">進捗確認</th>
                   <th className="text-left font-medium px-4 py-3">口座振替進捗</th>
                   <th className="text-left font-medium px-4 py-3">継続</th>

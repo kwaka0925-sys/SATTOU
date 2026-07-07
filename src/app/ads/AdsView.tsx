@@ -9,6 +9,7 @@ import StatCard from "@/components/StatCard";
 import {
   AlertTriangle,
   Coins,
+  Copy,
   ExternalLink,
   Filter,
   Megaphone,
@@ -211,6 +212,43 @@ export default function AdsView({
     if (synced !== undefined) return synced;
     return r.adSpend ?? 0;
   };
+
+  // 列コピー: フィルタ後の順序をそのまま縦一列でクリップボードに載せる。
+  // スプレッドシートに貼り付けると各行が別セルに入る。
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const copyColumn = async (
+    values: Array<string | number | null | undefined>,
+    label: string,
+  ) => {
+    const text = values
+      .map((v) => (v == null || v === "" ? "" : String(v)))
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyToast(`${label} を ${values.length} 件コピーしました`);
+    } catch {
+      setCopyToast("コピーに失敗しました（HTTPSまたは権限を確認）");
+    }
+    setTimeout(() => setCopyToast(null), 2500);
+  };
+
+  // ヘッダーの列名の右に置く小さなコピーアイコンボタン
+  const HeaderCopyButton = ({
+    onClick,
+    title,
+  }: {
+    onClick: () => void;
+    title: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-slate-400 hover:text-brand-700 transition-colors ml-1 align-middle"
+      title={title}
+    >
+      <Copy className="w-3 h-3 inline" />
+    </button>
+  );
 
   const totals = filtered.reduce(
     (acc, r) => ({
@@ -456,6 +494,11 @@ export default function AdsView({
           </div>
         </div>
       </div>
+      {copyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs px-4 py-2 rounded-md shadow-lg">
+          {copyToast}
+        </div>
+      )}
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
@@ -464,13 +507,59 @@ export default function AdsView({
                 <tr>
                   <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px]">
                     サロン名
+                    <HeaderCopyButton
+                      title="サロン名を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.clientName),
+                          "サロン名",
+                        )
+                      }
+                    />
                   </th>
                   <th className="text-left font-medium px-4 py-3">担当</th>
                   <th className="text-left font-medium px-4 py-3">別の広告費URL</th>
-                  <th className="text-right font-medium px-4 py-3">広告費</th>
+                  <th className="text-right font-medium px-4 py-3">
+                    広告費
+                    <HeaderCopyButton
+                      title="広告費を縦一列でコピー（同期済みはMeta値を優先）"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => {
+                            const s = syncMap.get(r.id);
+                            if (s !== undefined) return s;
+                            return r.adSpend ?? "";
+                          }),
+                          "広告費",
+                        )
+                      }
+                    />
+                  </th>
                   <th className="text-right font-medium px-4 py-3">下限額</th>
-                  <th className="text-right font-medium px-4 py-3">運用代行 (税抜)</th>
-                  <th className="text-right font-medium px-4 py-3">運用代行 (税込)</th>
+                  <th className="text-right font-medium px-4 py-3">
+                    運用代行 (税抜)
+                    <HeaderCopyButton
+                      title="運用代行 (税抜) を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.operationFeeExTax ?? ""),
+                          "運用代行(税抜)",
+                        )
+                      }
+                    />
+                  </th>
+                  <th className="text-right font-medium px-4 py-3">
+                    運用代行 (税込)
+                    <HeaderCopyButton
+                      title="運用代行 (税込) を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.operationFeeIncTax ?? ""),
+                          "運用代行(税込)",
+                        )
+                      }
+                    />
+                  </th>
                   <th className="text-right font-medium px-4 py-3">マージン率</th>
                 </tr>
               </thead>
