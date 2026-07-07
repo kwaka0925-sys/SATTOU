@@ -11,7 +11,8 @@ const STORAGE_KEY = "sattou-system-migration";
 
 type MigrationStatus = {
   completed: boolean;
-  migrationDate: string; // YYYY-MM-DD
+  migrationDate: string; // YYYY-MM-DD (実施日)
+  plannedDate: string; // YYYY-MM-DD (予定日)
 };
 
 type MigrationMap = Record<string, MigrationStatus>;
@@ -41,7 +42,12 @@ function monthTitle(month: string): string {
 
 // クライアントの status を取り出す (存在しなければ既定値)
 function getStatus(map: MigrationMap, key: string): MigrationStatus {
-  return map[key] ?? { completed: false, migrationDate: "" };
+  const stored = map[key];
+  return {
+    completed: stored?.completed ?? false,
+    migrationDate: stored?.migrationDate ?? "",
+    plannedDate: stored?.plannedDate ?? "",
+  };
 }
 
 export default function SystemMigrationView({
@@ -105,6 +111,25 @@ export default function SystemMigrationView({
         const next = {
           ...prev,
           [clientName]: { ...current, migrationDate: date },
+        };
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const setPlannedDate = useCallback(
+    (clientName: string, date: string) => {
+      setMigrations((prev) => {
+        const current = getStatus(prev, clientName);
+        const next = {
+          ...prev,
+          [clientName]: { ...current, plannedDate: date },
         };
         try {
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -261,6 +286,8 @@ export default function SystemMigrationView({
                   <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[220px]">
                     クライアント名
                   </th>
+                  <th className="text-right font-medium px-4 py-3">ブランド数</th>
+                  <th className="text-right font-medium px-4 py-3">店舗数</th>
                   <th className="text-left font-medium px-4 py-3">識別番号</th>
                   <th className="text-left font-medium px-4 py-3">
                     システム移行
@@ -268,13 +295,16 @@ export default function SystemMigrationView({
                   <th className="text-left font-medium px-4 py-3">
                     システム移行日
                   </th>
+                  <th className="text-left font-medium px-4 py-3">
+                    システム移行予定日
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={7}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       表示できるクライアントがありません。
@@ -287,6 +317,12 @@ export default function SystemMigrationView({
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 sticky left-0 bg-white z-10 font-medium">
                         {r.clientName}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {r.brandCount ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {r.storeCount ?? "—"}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {r.subscriberId ?? "—"}
@@ -315,6 +351,16 @@ export default function SystemMigrationView({
                           type="date"
                           value={status.migrationDate}
                           onChange={(e) => setDate(r.clientName, e.target.value)}
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="date"
+                          value={status.plannedDate}
+                          onChange={(e) =>
+                            setPlannedDate(r.clientName, e.target.value)
+                          }
                           className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
                         />
                       </td>
