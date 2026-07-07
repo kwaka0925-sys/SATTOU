@@ -37,9 +37,10 @@
  *        SHEETS_GAS_TOKEN_BULK_PDF = TOKEN
  */
 
-const SLEEP_BETWEEN_TABS_MS = 1500; // レート制限回避のため（1.5秒間隔）
-const MAX_RETRY = 5;                // 429 エラー時のリトライ回数
-const RETRY_INITIAL_BACKOFF_MS = 2000; // 初回リトライまでの待機。以降指数バックオフ
+const SLEEP_BETWEEN_TABS_MS = 2000;   // レート制限回避のため (2秒間隔で30req/min)
+const MAX_RETRY = 2;                  // 429 エラー時のリトライ回数（合計時間を6分制限内に）
+const RETRY_INITIAL_BACKOFF_MS = 3000; // リトライ待機: 3秒 → 6秒
+const MAX_EXECUTION_MS = 5.5 * 60 * 1000; // GAS の6分制限手前で切り上げ (5分30秒)
 
 function doPost(e) {
   try {
@@ -92,11 +93,46 @@ function doPost(e) {
     const results = [];
     let successCount = 0;
     let errorCount = 0;
+    let skippedExisting = 0;
+    let timedOut = false;
+    const startTime = new Date().getTime();
 
     for (var i = 0; i < sheets.length; i++) {
+      // 6分制限に達しそうなら早めに切り上げて残りは未処理として返す。
+      // (Google に強制停止されるより自前で返した方が JSON エラーにならない)
+      if (new Date().getTime() - startTime > MAX_EXECUTION_MS) {
+        timedOut = true;
+        for (var k = i; k < sheets.length; k++) {
+          results.push({
+            tabName: sheets[k].getName(),
+            fileName: `${fileNamePrefix}_${sheets[k].getName()}.pdf`,
+            error: '実行時間制限に達したためスキップ。再実行してください。',
+          });
+          errorCount++;
+        }
+        break;
+      }
+
       const sheet = sheets[i];
       const tabName = sheet.getName();
       const fileName = `${fileNamePrefix}_${tabName}.pdf`;
+
+      // 既存の同名 PDF はスキップ (再実行で既に生成済みのタブを再処理しない)
+      const existing = folder.getFilesByName(fileName);
+      if (existing.hasNext()) {
+        const existingFile = existing.next();
+        results.push({
+          tabName: tabName,
+          fileName: fileName,
+          fileId: existingFile.getId(),
+          fileUrl: existingFile.getUrl(),
+          skipped: true,
+        });
+        successCount++;
+        skippedExisting++;
+        continue;
+      }
+
       try {
         const blob = exportSheetAsPdf_(spreadsheetId, sheet.getSheetId(), oauthToken);
         blob.setName(fileName);
@@ -127,6 +163,8 @@ function doPost(e) {
       total: sheets.length,
       successCount: successCount,
       errorCount: errorCount,
+      skippedExisting: skippedExisting,
+      timedOut: timedOut,
       results: results,
     });
   } catch (err) {

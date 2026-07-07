@@ -44,11 +44,14 @@ type BulkPdfState =
       total: number;
       successCount: number;
       errorCount: number;
+      skippedExisting?: number;
+      timedOut?: boolean;
       results: Array<{
         tabName: string;
         fileName: string;
         fileUrl?: string;
         error?: string;
+        skipped?: boolean;
       }>;
     }
   | { status: "error"; monthKey: string; message: string };
@@ -186,6 +189,8 @@ export default function MonthlySheetsListView({
         total: data.total ?? 0,
         successCount: data.successCount ?? 0,
         errorCount: data.errorCount ?? 0,
+        skippedExisting: data.skippedExisting ?? 0,
+        timedOut: !!data.timedOut,
         results: data.results ?? [],
       });
     } catch (err) {
@@ -536,6 +541,11 @@ export default function MonthlySheetsListView({
                 <div className="text-xl font-semibold text-emerald-800">
                   {bulkPdf.successCount}
                 </div>
+                {(bulkPdf.skippedExisting ?? 0) > 0 && (
+                  <div className="text-[10px] text-emerald-700 mt-0.5">
+                    (既存 {bulkPdf.skippedExisting} 件を再利用)
+                  </div>
+                )}
               </div>
               <div className="card p-3 text-center bg-rose-50">
                 <div className="text-xs text-rose-700">エラー</div>
@@ -544,6 +554,17 @@ export default function MonthlySheetsListView({
                 </div>
               </div>
             </div>
+            {bulkPdf.timedOut && (
+              <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-3 leading-relaxed flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                <div>
+                  <div className="font-medium">実行時間制限に達しました</div>
+                  <div className="mt-1">
+                    GAS の6分制限のため一部が未処理です。**もう一度「一括PDF出力」ボタンを押す**と、既に生成済みの PDF はスキップされ、残りだけが処理されます。
+                  </div>
+                </div>
+              </div>
+            )}
             {bulkPdf.errorCount > 0 && (
               <details className="text-xs text-rose-800 bg-rose-50 rounded-md p-3">
                 <summary className="cursor-pointer font-medium">

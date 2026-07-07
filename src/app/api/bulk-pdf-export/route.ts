@@ -61,8 +61,12 @@ export async function POST(req: NextRequest) {
       // GAS 側で数秒〜数分かかる可能性があるのでキャッシュ無効
       cache: "no-store",
     });
+    // GAS が6分制限で強制停止された場合や、例外を出した場合は
+    // HTML の "An error occurred" ページを返してくる。JSON.parse を
+    // そのまま呼ぶと "Unexpected token" になるので、text 先読みで
+    // 判別してから JSON パースを試みる。
+    const text = await res.text();
     if (!res.ok) {
-      const text = await res.text();
       return NextResponse.json(
         {
           error: `GAS responded ${res.status}`,
@@ -71,8 +75,19 @@ export async function POST(req: NextRequest) {
         { status: 502 },
       );
     }
-    const data = await res.json();
-    return NextResponse.json(data);
+    try {
+      const data = JSON.parse(text);
+      return NextResponse.json(data);
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "GAS が JSON ではないエラーページを返しました。実行時間制限 (6分) 超過の可能性が高いです。GAS 側で自動リトライロジックを縮小しています。既に生成された PDF はスキップされるので、もう一度「一括PDF出力」を押して残りを処理してください。",
+          detail: text.slice(0, 500),
+        },
+        { status: 502 },
+      );
+    }
   } catch (err) {
     return NextResponse.json(
       {
