@@ -33,7 +33,9 @@
  *        SHEETS_GAS_TOKEN_BULK_PDF = TOKEN
  */
 
-const SLEEP_BETWEEN_TABS_MS = 400; // レート制限回避のため
+const SLEEP_BETWEEN_TABS_MS = 1500; // レート制限回避のため（1.5秒間隔）
+const MAX_RETRY = 5;                // 429 エラー時のリトライ回数
+const RETRY_INITIAL_BACKOFF_MS = 2000; // 初回リトライまでの待機。以降指数バックオフ
 
 function doPost(e) {
   try {
@@ -143,7 +145,8 @@ function openFolder_(urlOrId) {
   }
 }
 
-// 特定タブを PDF ブロブとして取得
+// 特定タブを PDF ブロブとして取得。429 (Too Many Requests) は
+// 指数バックオフで再試行し、Google のレート制限を吸収する。
 function exportSheetAsPdf_(spreadsheetId, sheetId, oauthToken) {
   const exportUrl =
     'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export' +
@@ -158,16 +161,36 @@ function exportSheetAsPdf_(spreadsheetId, sheetId, oauthToken) {
     '&gridlines=false' +
     '&fzr=false';
 
-  const response = UrlFetchApp.fetch(exportUrl, {
-    headers: { Authorization: 'Bearer ' + oauthToken },
-    muteHttpExceptions: true,
-  });
+  var lastCode = 0;
+  var lastMessage = '';
+  for (var attempt = 0; attempt <= MAX_RETRY; attempt++) {
+    if (attempt > 0) {
+      // 指数バックオフ: 2秒 → 4秒 → 8秒 → 16秒 → 32秒
+      Utilities.sleep(RETRY_INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1));
+    }
 
-  const code = response.getResponseCode();
-  if (code !== 200) {
+    var response = UrlFetchApp.fetch(exportUrl, {
+      headers: { Authorization: 'Bearer ' + oauthToken },
+      muteHttpExceptions: true,
+    });
+
+    var code = response.getResponseCode();
+    if (code === 200) {
+      return response.getBlob();
+    }
+
+    lastCode = code;
+    // 429 (rate limit) と 5xx (一時エラー) はリトライ対象
+    if (code === 429 || (code >= 500 && code < 600)) {
+      lastMessage = 'HTTP ' + code + ' (retryable)';
+      continue;
+    }
+    // それ以外はリトライしても無駄なので即失敗
     throw new Error('PDF export HTTP ' + code);
   }
-  return response.getBlob();
+  throw new Error(
+    'PDF export failed after ' + MAX_RETRY + ' retries. Last: ' + lastMessage,
+  );
 }
 
 function jsonResponse_(payload) {
