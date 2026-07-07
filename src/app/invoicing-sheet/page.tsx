@@ -19,6 +19,8 @@ export default function InvoicingSheetPage({
       basePath="/invoicing-sheet"
       storageKey="sattou-invoicing-sheets"
       year={Number.isFinite(year) ? year : currentYear}
+      pdfNamePrefix="請求書"
+      folderStorageKey="sattou-invoicing-pdf-folder"
     />
   );
 }

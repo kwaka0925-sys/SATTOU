@@ -19,6 +19,8 @@ export default function BankTransferSheetPage({
       basePath="/bank-transfer-sheet"
       storageKey="sattou-bank-transfer-sheets"
       year={Number.isFinite(year) ? year : currentYear}
+      pdfNamePrefix="口座振替"
+      folderStorageKey="sattou-bank-transfer-pdf-folder"
     />
   );
 }
