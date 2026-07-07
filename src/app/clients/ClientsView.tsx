@@ -158,6 +158,14 @@ export default function ClientsView({
     setTimeout(() => setToast(null), 3500);
   }, []);
 
+  // syncField から呼ぶ router.refresh() を、宣言順序の都合上 ref 経由で参照する。
+  // (hooks の順序を維持したまま useRouter の値を先に確定させる)
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+
   // /api/invoices/update を叩いてシートのセルを更新する。
   // subscriberId が空の行 (加入者識別番号未設定) は同期スキップ。
   // 成功したらローカル override を削除し、シートを唯一の情報源にする
@@ -188,23 +196,13 @@ export default function ClientsView({
           delete next[key];
           return next;
         });
-        // シートへの反映が確定したので、対応するローカル override を消す。
-        // 次に再取得すればシートの値がそのまま画面に出るので、
-        // シート直接編集との齟齬が起きなくなる。
-        setOverrides((prev) => {
-          const rowPrev = prev[id];
-          if (!rowPrev || rowPrev[field] === undefined) return prev;
-          const rowNext: RowOverride = { ...rowPrev };
-          delete rowNext[field];
-          const next: OverridesMap = { ...prev };
-          if (Object.keys(rowNext).length === 0) {
-            delete next[id];
-          } else {
-            next[id] = rowNext;
-          }
-          persistOverrides(next);
-          return next;
-        });
+        // シートへの反映が確定した。ここで override を即座に消すと、
+        // 次の SSR 再取得が届く前に UI が古い r.<field> にフォールバックして
+        // 値が「元に戻る」ように見えてしまう。override は残したまま
+        // 別の useEffect で「新しい SSR 値と一致した時のみ」除去する。
+        // 新しい SSR を早く取り込むために refresh は仕込んでおく (下の
+        // useEffect(rows) が入れ替わりに override をクリアする)。
+        if (routerRef.current) routerRef.current.refresh();
       } catch (err) {
         setSyncState((prev) => ({ ...prev, [key]: "error" }));
         showToast(
@@ -268,12 +266,14 @@ export default function ClientsView({
 
   // シートを直接編集した内容を sattou 側に反映するためのリフレッシュ。
   // Server Component (page.tsx) をサーバー側で再実行して最新シートを取り込む。
-  const router = useRouter();
+  // 上部で宣言済みの router を使う。
   const [refreshing, setRefreshing] = useState(false);
   const refresh = useCallback(() => {
     setRefreshing(true);
+    // 「シート更新」ボタンはシート側の直接編集を取り込む用途。
+    // ローカル override は「未同期のユーザー入力」なので消さないが、
+    // useEffect(rows) が incoming と一致した override を掃除する。
     router.refresh();
-    // Next.js の refresh は同期的な完了通知がないので、体感的に短めのタイマーで解除する。
     setTimeout(() => setRefreshing(false), 1200);
   }, [router]);
 
@@ -286,6 +286,50 @@ export default function ClientsView({
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [router]);
+
+  // 新しい SSR 行データが届くたびに、override の中で「もう sheet と同じ」
+  // ものを掃除する。これで syncField 直後の router.refresh() が返ってきた
+  // タイミングで override が透けて消え、次に外部でシートが編集されたときは
+  // 新しい sheet 値がそのまま表示される。
+  useEffect(() => {
+    setOverrides((prev) => {
+      let mutated = false;
+      const next: OverridesMap = {};
+      for (const [id, row] of Object.entries(prev)) {
+        const sheetRow = rows.find((r) => r.id === id);
+        if (!sheetRow) {
+          next[id] = row;
+          continue;
+        }
+        const kept: RowOverride = {};
+        (Object.keys(row) as EditableField[]).forEach((field) => {
+          const overrideVal = row[field] ?? "";
+          const sheetVal =
+            field === "paymentMethod"
+              ? sheetRow.paymentMethod ?? ""
+              : field === "progress"
+                ? sheetRow.progress ?? ""
+                : field === "subscriptionStatus"
+                  ? sheetRow.subscriptionStatus ?? ""
+                  : field === "marketer"
+                    ? sheetRow.marketer ?? ""
+                    : field === "note"
+                      ? sheetRow.note ?? ""
+                      : undefined;
+          if (sheetVal === undefined || overrideVal !== sheetVal) {
+            kept[field] = row[field];
+          } else {
+            mutated = true;
+          }
+        });
+        if (Object.keys(kept).length > 0) next[id] = kept;
+        else mutated = true;
+      }
+      if (!mutated) return prev;
+      persistOverrides(next);
+      return next;
+    });
+  }, [rows, persistOverrides]);
 
   // セル横に添える 3px の状態ドット。同期中は青、失敗は赤、通常は非表示。
   const SyncDot = ({
