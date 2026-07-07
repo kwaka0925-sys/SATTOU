@@ -210,7 +210,8 @@ export default function AdsView({
       if (marketer !== "all" && r.marketer !== marketer) return false;
       if (q) {
         const qq = q.toLowerCase();
-        if (!r.clientName.toLowerCase().includes(qq)) return false;
+        const hay = `${r.clientName} ${r.subscriberId ?? ""}`.toLowerCase();
+        if (!hay.includes(qq)) return false;
       }
       return true;
     });
@@ -478,7 +479,7 @@ export default function AdsView({
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="サロン名で検索"
+              placeholder="サロン名 / 識別番号で検索"
               className="input pl-9"
             />
           </div>
@@ -545,6 +546,18 @@ export default function AdsView({
                     />
                   </th>
                   <th className="text-left font-medium px-4 py-3">担当</th>
+                  <th className="text-left font-medium px-4 py-3">
+                    加入者識別番号
+                    <HeaderCopyButton
+                      title="加入者識別番号を縦一列でコピー"
+                      onClick={() =>
+                        copyColumn(
+                          filtered.map((r) => r.subscriberId ?? ""),
+                          "加入者識別番号",
+                        )
+                      }
+                    />
+                  </th>
                   <th className="text-left font-medium px-4 py-3">別の広告費URL</th>
                   <th className="text-right font-medium px-4 py-3">
                     広告費
@@ -636,6 +649,9 @@ export default function AdsView({
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {r.marketer ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {r.subscriberId ?? "—"}
                       </td>
                       <td className="px-4 py-3">
                         {r.otherAdSpendUrl ? (
