@@ -5,7 +5,15 @@ import { useMemo, useState } from "react";
 import { yen, pct } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
-import { ExternalLink, Filter, Search } from "lucide-react";
+import StatCard from "@/components/StatCard";
+import {
+  Coins,
+  ExternalLink,
+  Filter,
+  Megaphone,
+  Percent,
+  Search,
+} from "lucide-react";
 import type { SheetInvoice } from "@/lib/sheets";
 
 type Props = {
@@ -68,47 +76,55 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
         title="運用代行売上"
         subtitle={`${monthTitle(month)} · クライアント別の広告費・運用代行費 (${filtered.length} 社表示)`}
       />
-      <div className="shrink-0 p-6 pb-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-slate-500">月表示</div>
-          <MonthPicker current={month} />
-        </div>
+      <div className="shrink-0 px-6 pt-4 pb-3 space-y-3">
         {!configured && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-2">
             GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
             <code className="font-mono"> SHEETS_GAS_TOKEN </code>
-            を Vercel の環境変数に登録すると、シート列R〜V（広告費・下限額・運用代行税抜/税込）が反映されます。数式もそのまま計算結果として表示されます。
+            を Vercel の環境変数に登録すると、シート列R〜V（広告費・下限額・運用代行税抜/税込）が反映されます。
           </div>
         )}
         {configured && rows.length === 0 && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-2">
             {monthLabel(month)}分のデータがシートに見つかりませんでした。
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">総広告費</div>
-            <div className="text-2xl font-semibold mt-1">{yen(totals.adSpend)}</div>
-          </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">総運用代行 (税抜)</div>
-            <div className="text-2xl font-semibold mt-1">{yen(totals.feeExTax)}</div>
-          </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">総運用代行 (税込)</div>
-            <div className="text-2xl font-semibold mt-1">{yen(totals.feeIncTax)}</div>
-          </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">平均マージン率</div>
-            <div className="text-2xl font-semibold mt-1 text-emerald-600">
-              {pct(avgMargin, 1)}
-            </div>
-          </div>
+        {/* 1段目: コンパクトなKPIタイル4枚 (色分けで役割を可視化) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            size="sm"
+            accent="warning"
+            label="総広告費"
+            value={yen(totals.adSpend)}
+            icon={<Megaphone className="w-4 h-4" />}
+          />
+          <StatCard
+            size="sm"
+            accent="brand"
+            label="総運用代行 (税抜)"
+            value={yen(totals.feeExTax)}
+            icon={<Coins className="w-4 h-4" />}
+          />
+          <StatCard
+            size="sm"
+            accent="primary"
+            label="総運用代行 (税込)"
+            value={yen(totals.feeIncTax)}
+            icon={<Coins className="w-4 h-4" />}
+          />
+          <StatCard
+            size="sm"
+            accent="success"
+            label="平均マージン率"
+            value={pct(avgMargin, 1)}
+            icon={<Percent className="w-4 h-4" />}
+          />
         </div>
 
-        <div className="card p-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[240px]">
+        {/* 2段目: 月ピッカー + 検索 + フィルタを1行にまとめてスクロール領域を確保 */}
+        <div className="card p-3 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={q}
@@ -134,6 +150,10 @@ export default function AdsView({ rows, month, configured, isMock }: Props) {
               </select>
             </>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-slate-500">月表示</span>
+            <MonthPicker current={month} />
+          </div>
         </div>
       </div>
       <div className="flex-1 min-h-0 px-6 pb-6">
