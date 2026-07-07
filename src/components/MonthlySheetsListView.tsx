@@ -154,8 +154,8 @@ export default function MonthlySheetsListView({
     const [y, m] = monthKey.split("-");
     const monthLabel = `${y}年${parseInt(m, 10)}月`;
     const fileNamePrefix = `${monthLabel}${pdfNamePrefix}`;
-    // サブフォルダ名: "2026年7月発送請求書" / "2026年7月発送口座振替"
-    const subfolderName = `${monthLabel}発送${pdfNamePrefix}`;
+    // サブフォルダ名: "2026年7月SATTOU請求書" / "2026年7月SATTOU口座振替"
+    const subfolderName = `${monthLabel}SATTOU${pdfNamePrefix}`;
 
     setBulkPdf({ status: "running", monthKey });
     try {
@@ -449,7 +449,7 @@ export default function MonthlySheetsListView({
               <div>
                 <span className="text-slate-500">サブフォルダ: </span>
                 <span className="font-mono text-xs">
-                  {`${bulkPdf.monthKey.split("-")[0]}年${parseInt(bulkPdf.monthKey.split("-")[1], 10)}月発送${pdfNamePrefix}`}
+                  {`${bulkPdf.monthKey.split("-")[0]}年${parseInt(bulkPdf.monthKey.split("-")[1], 10)}月SATTOU${pdfNamePrefix}`}
                 </span>
                 <span className="text-[10px] text-slate-500 ml-1">
                   (親フォルダ内に自動作成)
