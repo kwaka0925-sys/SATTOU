@@ -283,19 +283,25 @@ export default function SystemMigrationView({
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
-                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[220px]">
+                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 w-[240px] max-w-[240px]">
                     クライアント名
                   </th>
-                  <th className="text-right font-medium px-4 py-3">ブランド数</th>
-                  <th className="text-right font-medium px-4 py-3">店舗数</th>
-                  <th className="text-left font-medium px-4 py-3">識別番号</th>
-                  <th className="text-left font-medium px-4 py-3">
+                  <th className="text-center font-medium px-4 py-3 w-[90px]">
+                    ブランド数
+                  </th>
+                  <th className="text-center font-medium px-4 py-3 w-[90px]">
+                    店舗数
+                  </th>
+                  <th className="text-center font-medium px-4 py-3 w-[110px]">
+                    識別番号
+                  </th>
+                  <th className="text-left font-medium px-4 py-3 w-[140px]">
                     システム移行
                   </th>
-                  <th className="text-left font-medium px-4 py-3">
+                  <th className="text-left font-medium px-4 py-3 w-[160px]">
                     システム移行日
                   </th>
-                  <th className="text-left font-medium px-4 py-3">
+                  <th className="text-left font-medium px-4 py-3 w-[160px]">
                     システム移行予定日
                   </th>
                 </tr>
@@ -315,16 +321,16 @@ export default function SystemMigrationView({
                   const status = getStatus(migrations, r.clientName);
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 sticky left-0 bg-white z-10 font-medium">
+                      <td className="px-4 py-3 sticky left-0 bg-white z-10 font-medium truncate max-w-[240px]">
                         {r.clientName}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-4 py-3 text-center tabular-nums">
                         {r.brandCount ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-4 py-3 text-center tabular-nums">
                         {r.storeCount ?? "—"}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs">
+                      <td className="px-4 py-3 text-center font-mono text-xs">
                         {r.subscriberId ?? "—"}
                       </td>
                       <td className="px-4 py-3">
