@@ -52,8 +52,6 @@ export type SheetInvoice = Omit<Invoice, "clientId"> & {
   operationFeeIncTax?: number;
 };
 
-const REVALIDATE_SECONDS = 60;
-
 export function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -244,9 +242,10 @@ export async function fetchInvoicesFromSheetWithMeta(
   url.searchParams.set("month", month);
 
   try {
-    const res = await fetch(url.toString(), {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
-    });
+    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
+    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
+    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return empty;
@@ -321,9 +320,10 @@ export async function fetchInvoicesForMonthStrict(
   url.searchParams.set("month", month);
 
   try {
-    const res = await fetch(url.toString(), {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
-    });
+    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
+    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
+    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) return [];
     const data = (await res.json()) as {
       rows?: SheetRow[];
@@ -366,9 +366,10 @@ export async function fetchDashboardTotals(
   url.searchParams.set("month", month);
 
   try {
-    const res = await fetch(url.toString(), {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
-    });
+    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
+    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
+    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return { ...empty, configured: true };
@@ -486,9 +487,10 @@ export async function fetchStoresFromSheet(
   url.searchParams.set("month", month);
 
   try {
-    const res = await fetch(url.toString(), {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["invoices-sheet"] },
-    });
+    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
+    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
+    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return { configured: true, rows: [] };
