@@ -102,13 +102,20 @@ function doGet(e) {
 
   const month = params.month || currentMonth_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = resolveSheet_(ss, month);
-  if (!sheet) {
-    return jsonResponse({ error: `sheet not found for ${month}`, rows: [] });
+  const match = resolveSheet_(ss, month);
+  if (!match) {
+    // ★ アクティブシートへのフォールバックは行わない。
+    //    見つからない事実を明示的に伝える方が誤動作より安全。
+    return jsonResponse({
+      error: `sheet not found for ${month}`,
+      requested: month,
+      tabs: ss.getSheets().map(function (s) { return s.getName(); }),
+      rows: []
+    });
   }
 
-  const rows = readRows_(sheet);
-  return jsonResponse({ month, sheet: sheet.getName(), rows });
+  const rows = readRows_(match);
+  return jsonResponse({ month, sheet: match.getName(), rows });
 }
 
 function currentMonth_() {
@@ -117,13 +124,68 @@ function currentMonth_() {
   return `${d.getFullYear()}-${m}`;
 }
 
+// 全角括弧・全角数字・全角スペース等を吸収して比較しやすくする。
+// 例: "2026年請求書8月（7月稼働）" と "2026年請求書8月(7月稼働)" を同一視。
+function normalizeSheetName_(s) {
+  if (!s) return '';
+  return String(s)
+    // 全角数字 → 半角数字
+    .replace(/[０-９]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    })
+    // 全角英字 → 半角英字
+    .replace(/[Ａ-Ｚａ-ｚ]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    })
+    // 全角括弧 → 半角括弧
+    .replace(/（/g, '(').replace(/）/g, ')')
+    // 全角スペース → 半角スペース
+    .replace(/　/g, ' ')
+    // 全ての空白を除去
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+// タブ解決を強化。以下の優先順で探し、それでも見つからなければ null を返す。
+//   1. 厳密一致（既存パターン）
+//   2. 正規化一致（半角/全角・空白の差異を吸収）
+//   3. 部分一致（"YYYY年請求書M月" を含むタブを探す。「のコピー」等の付加も許容）
+//   4. 部分一致（"YYYY-MM" を含むタブ）
 function resolveSheet_(ss, month) {
+  const [y, m] = month.split('-');
+  const mNum = parseInt(m, 10);
   const candidates = MONTH_TAB_PATTERNS(month);
-  for (const name of candidates) {
-    const s = ss.getSheetByName(name);
+  const sheets = ss.getSheets();
+
+  // 1. 厳密一致
+  for (var i = 0; i < candidates.length; i++) {
+    var s = ss.getSheetByName(candidates[i]);
     if (s) return s;
   }
-  return ss.getActiveSheet();
+
+  // 2. 正規化一致
+  var normCandidates = candidates.map(normalizeSheetName_);
+  for (var j = 0; j < sheets.length; j++) {
+    var norm = normalizeSheetName_(sheets[j].getName());
+    if (normCandidates.indexOf(norm) !== -1) return sheets[j];
+  }
+
+  // 3. 部分一致: "YYYY年請求書M月" を含む
+  var partialA = normalizeSheetName_(`${y}年請求書${mNum}月`);
+  for (var k = 0; k < sheets.length; k++) {
+    var n = normalizeSheetName_(sheets[k].getName());
+    if (n.indexOf(partialA) !== -1) return sheets[k];
+  }
+
+  // 4. 部分一致: "YYYY-MM"
+  var partialB = normalizeSheetName_(month);
+  for (var l = 0; l < sheets.length; l++) {
+    var n2 = normalizeSheetName_(sheets[l].getName());
+    if (n2.indexOf(partialB) !== -1) return sheets[l];
+  }
+
+  // 見つからなければ null。呼び出し側でエラーとして扱う。
+  return null;
 }
 
 function readRows_(sheet) {
