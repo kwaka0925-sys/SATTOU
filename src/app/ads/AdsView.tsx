@@ -8,6 +8,7 @@ import MonthPicker from "@/components/MonthPicker";
 import StatCard from "@/components/StatCard";
 import {
   AlertTriangle,
+  ArrowUpDown,
   Coins,
   Copy,
   ExternalLink,
@@ -19,6 +20,11 @@ import {
   Zap,
 } from "lucide-react";
 import type { SheetInvoice } from "@/lib/sheets";
+import {
+  applyOrderOverrides,
+  useOrderOverrides,
+} from "@/lib/rowOrderOverrides";
+import ReorderDialog from "@/components/ReorderDialog";
 
 type Props = {
   rows: SheetInvoice[];
@@ -195,8 +201,12 @@ export default function AdsView({
     return Array.from(set).sort();
   }, [rows]);
 
+  const { overrides: orderOverrides, setAfter, remove: removeOverride } =
+    useOrderOverrides();
+  const [reorderTarget, setReorderTarget] = useState<string | null>(null);
+
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const base = rows.filter((r) => {
       if (marketer !== "all" && r.marketer !== marketer) return false;
       if (q) {
         const qq = q.toLowerCase();
@@ -204,7 +214,8 @@ export default function AdsView({
       }
       return true;
     });
-  }, [rows, q, marketer]);
+    return applyOrderOverrides(base, orderOverrides);
+  }, [rows, q, marketer, orderOverrides]);
 
   // Meta同期済みの行はその値を優先、未同期の行はシートの値を使う
   const effectiveSpend = (r: SheetInvoice): number => {
@@ -499,6 +510,22 @@ export default function AdsView({
           {copyToast}
         </div>
       )}
+      {reorderTarget && (
+        <ReorderDialog
+          sourceName={reorderTarget}
+          allClientNames={rows.map((r) => r.clientName)}
+          currentTarget={orderOverrides[reorderTarget] ?? ""}
+          onSave={(target) => {
+            setAfter(reorderTarget, target);
+            setReorderTarget(null);
+          }}
+          onClear={() => {
+            removeOverride(reorderTarget);
+            setReorderTarget(null);
+          }}
+          onCancel={() => setReorderTarget(null)}
+        />
+      )}
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
@@ -579,16 +606,33 @@ export default function AdsView({
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 sticky left-0 bg-white z-10">
-                        {r.clientId ? (
-                          <Link
-                            href={`/clients/${r.clientId}`}
-                            className="font-medium hover:text-brand-700"
+                        <div className="flex items-center gap-1">
+                          {r.clientId ? (
+                            <Link
+                              href={`/clients/${r.clientId}`}
+                              className="font-medium hover:text-brand-700"
+                            >
+                              {r.clientName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{r.clientName}</span>
+                          )}
+                          <button
+                            onClick={() => setReorderTarget(r.clientName)}
+                            className={`p-0.5 rounded ${
+                              orderOverrides[r.clientName]
+                                ? "text-brand-600"
+                                : "text-slate-300 hover:text-brand-700"
+                            }`}
+                            title={
+                              orderOverrides[r.clientName]
+                                ? `並び順オーバーライド中: 「${orderOverrides[r.clientName]}」の直後`
+                                : "並び順を調整"
+                            }
                           >
-                            {r.clientName}
-                          </Link>
-                        ) : (
-                          <span className="font-medium">{r.clientName}</span>
-                        )}
+                            <ArrowUpDown className="w-3 h-3" />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {r.marketer ?? "—"}

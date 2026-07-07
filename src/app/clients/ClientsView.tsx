@@ -5,9 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { yen, num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
-import { AlertTriangle, Copy, Filter, Search } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, Copy, Filter, Search } from "lucide-react";
 import type { InvoicePaymentMethod } from "@/lib/types";
 import type { SheetInvoice } from "@/lib/sheets";
+import {
+  applyOrderOverrides,
+  useOrderOverrides,
+} from "@/lib/rowOrderOverrides";
+import ReorderDialog from "@/components/ReorderDialog";
 
 const PROGRESS_VALUES = [
   "未発行",
@@ -220,8 +225,12 @@ export default function ClientsView({
     return Array.from(set);
   }, [rows, effectiveSubscription]);
 
+  const { overrides: orderOverrides, setAfter, remove: removeOverride } =
+    useOrderOverrides();
+  const [reorderTarget, setReorderTarget] = useState<string | null>(null);
+
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const base = rows.filter((r) => {
       const rowPm = effectivePaymentMethod(r);
       const rowProgress = effectiveProgress(r);
       const rowMarketer = effectiveMarketer(r);
@@ -241,12 +250,14 @@ export default function ClientsView({
       }
       return true;
     });
+    return applyOrderOverrides(base, orderOverrides);
   }, [
     rows,
     pm,
     progressFilter,
     marketer,
     q,
+    orderOverrides,
     effectivePaymentMethod,
     effectiveProgress,
     effectiveMarketer,
@@ -455,6 +466,22 @@ export default function ClientsView({
           {copyToast}
         </div>
       )}
+      {reorderTarget && (
+        <ReorderDialog
+          sourceName={reorderTarget}
+          allClientNames={rows.map((r) => r.clientName)}
+          currentTarget={orderOverrides[reorderTarget] ?? ""}
+          onSave={(target) => {
+            setAfter(reorderTarget, target);
+            setReorderTarget(null);
+          }}
+          onClear={() => {
+            removeOverride(reorderTarget);
+            setReorderTarget(null);
+          }}
+          onCancel={() => setReorderTarget(null)}
+        />
+      )}
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
@@ -557,16 +584,33 @@ export default function ClientsView({
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 sticky left-0 bg-white z-10">
-                        {r.clientId ? (
-                          <Link
-                            href={`/clients/${r.clientId}`}
-                            className="font-medium hover:text-brand-700"
+                        <div className="flex items-center gap-1">
+                          {r.clientId ? (
+                            <Link
+                              href={`/clients/${r.clientId}`}
+                              className="font-medium hover:text-brand-700"
+                            >
+                              {r.clientName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{r.clientName}</span>
+                          )}
+                          <button
+                            onClick={() => setReorderTarget(r.clientName)}
+                            className={`p-0.5 rounded ${
+                              orderOverrides[r.clientName]
+                                ? "text-brand-600"
+                                : "text-slate-300 hover:text-brand-700"
+                            }`}
+                            title={
+                              orderOverrides[r.clientName]
+                                ? `並び順オーバーライド中: 「${orderOverrides[r.clientName]}」の直後`
+                                : "並び順を調整"
+                            }
                           >
-                            {r.clientName}
-                          </Link>
-                        ) : (
-                          <span className="font-medium">{r.clientName}</span>
-                        )}
+                            <ArrowUpDown className="w-3 h-3" />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {r.brandCount ?? "—"}
