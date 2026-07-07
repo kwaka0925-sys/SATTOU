@@ -103,7 +103,11 @@ function resolveUrl(raw: string): string | null {
   return null;
 }
 
-export default function LoginManagerView() {
+type LoginManagerViewProps = {
+  locker?: React.ReactNode;
+};
+
+export default function LoginManagerView({ locker }: LoginManagerViewProps = {}) {
   const [entries, setEntries] = useState<LoginEntry[]>([]);
   const [q, setQ] = useState("");
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
@@ -271,6 +275,7 @@ export default function LoginManagerView() {
             <Plus className="w-4 h-4" />
             新規追加
           </button>
+          {locker}
         </div>
 
         {/* 追加 / 編集フォーム */}
