@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   Landmark,
   ExternalLink,
+  ArrowRightLeft,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,6 +46,16 @@ const NAV_SECTIONS: NavSection[] = [
     title: "導入店舗",
     items: [
       { href: "/stores", label: "sattou導入店舗", icon: Building2 },
+    ],
+  },
+  {
+    title: "新システム移行",
+    items: [
+      {
+        href: "/system-migration",
+        label: "新システム移行",
+        icon: ArrowRightLeft,
+      },
     ],
   },
   {
