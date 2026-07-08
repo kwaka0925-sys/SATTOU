@@ -265,27 +265,35 @@ export default function ClientsView({
   }, []);
 
   // シートを直接編集した内容を sattou 側に反映するためのリフレッシュ。
-  // Server Component (page.tsx) をサーバー側で再実行して最新シートを取り込む。
-  // 上部で宣言済みの router を使う。
+  // fetch cache は 60 秒有効なので、router.refresh() だけでは
+  // 変更後 60 秒未満のキャッシュに引っかかってしまう。先に
+  // /api/invoices/revalidate を叩いて Next のキャッシュタグを無効化し、
+  // その直後に router.refresh() で server component を再実行する。
   const [refreshing, setRefreshing] = useState(false);
+  const revalidateAndRefresh = useCallback(async () => {
+    try {
+      await fetch("/api/invoices/revalidate", { method: "POST" });
+    } catch {
+      // キャッシュ無効化に失敗しても router.refresh() は試す (最悪 60 秒待てば揃う)
+    }
+    router.refresh();
+  }, [router]);
+
   const refresh = useCallback(() => {
     setRefreshing(true);
-    // 「シート更新」ボタンはシート側の直接編集を取り込む用途。
-    // ローカル override は「未同期のユーザー入力」なので消さないが、
-    // useEffect(rows) が incoming と一致した override を掃除する。
-    router.refresh();
+    void revalidateAndRefresh();
     setTimeout(() => setRefreshing(false), 1200);
-  }, [router]);
+  }, [revalidateAndRefresh]);
 
   // 「別タブでシート編集 → sattou タブに戻る」を検知して自動再取得。
   // 常時ポーリングだと GAS を叩きすぎるので、フォーカスイベントのみに絞る。
   useEffect(() => {
     const onFocus = () => {
-      router.refresh();
+      void revalidateAndRefresh();
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [router]);
+  }, [revalidateAndRefresh]);
 
   // 新しい SSR 行データが届くたびに、override の中で「もう sheet と同じ」
   // ものを掃除する。これで syncField 直後の router.refresh() が返ってきた

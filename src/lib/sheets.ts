@@ -242,10 +242,16 @@ export async function fetchInvoicesFromSheetWithMeta(
   url.searchParams.set("month", month);
 
   try {
-    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
-    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
-    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
+    // 双方向同期の鮮度は次の 3 経路で確保している:
+    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
+    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
+    //   3. 「シート更新」ボタン       → 同上
+    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
+    // 何か変化があった直後は必ず最新を取り直す構成になっている。
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 60, tags: ["invoices-sheet"] },
+    });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return empty;
@@ -320,10 +326,16 @@ export async function fetchInvoicesForMonthStrict(
   url.searchParams.set("month", month);
 
   try {
-    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
-    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
-    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
+    // 双方向同期の鮮度は次の 3 経路で確保している:
+    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
+    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
+    //   3. 「シート更新」ボタン       → 同上
+    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
+    // 何か変化があった直後は必ず最新を取り直す構成になっている。
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 60, tags: ["invoices-sheet"] },
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as {
       rows?: SheetRow[];
@@ -366,10 +378,16 @@ export async function fetchDashboardTotals(
   url.searchParams.set("month", month);
 
   try {
-    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
-    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
-    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
+    // 双方向同期の鮮度は次の 3 経路で確保している:
+    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
+    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
+    //   3. 「シート更新」ボタン       → 同上
+    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
+    // 何か変化があった直後は必ず最新を取り直す構成になっている。
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 60, tags: ["invoices-sheet"] },
+    });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return { ...empty, configured: true };
@@ -487,10 +505,16 @@ export async function fetchStoresFromSheet(
   url.searchParams.set("month", month);
 
   try {
-    // 双方向同期のため Next.js のデータキャッシュを介さず毎回 GAS を叩く。
-    // 60 秒キャッシュにしていると、スプレッドシート直接編集 → sattou タブに
-    // 戻る → router.refresh() を呼んでも、キャッシュ内の古い値が返る。
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
+    // 双方向同期の鮮度は次の 3 経路で確保している:
+    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
+    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
+    //   3. 「シート更新」ボタン       → 同上
+    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
+    // 何か変化があった直後は必ず最新を取り直す構成になっている。
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 60, tags: ["invoices-sheet"] },
+    });
     if (!res.ok) {
       console.warn(`[sheets] GAS responded ${res.status}`);
       return { configured: true, rows: [] };

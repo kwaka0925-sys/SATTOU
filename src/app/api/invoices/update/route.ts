@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,6 +87,10 @@ export async function POST(req: NextRequest) {
           { status: 502 },
         );
       }
+      // シート書き戻し成功時に fetchInvoicesFromSheetWithMeta の
+      // データキャッシュを無効化。次に /clients や /ads を表示すると
+      // 60 秒キャッシュを待たず、書き戻した内容が反映される。
+      revalidateTag("invoices-sheet");
       return NextResponse.json(data);
     } catch {
       return NextResponse.json(
