@@ -753,7 +753,7 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-left font-medium px-4 py-3">
+                  <th className="text-left font-medium px-4 py-3 w-[130px] max-w-[130px]">
                     振込名
                     <HeaderCopyButton
                       title="振込名を縦一列でコピー"
@@ -778,10 +778,12 @@ export default function ClientsView({
                     />
                   </th>
                   <th className="text-left font-medium px-4 py-3">進捗確認</th>
-                  <th className="text-left font-medium px-4 py-3">口座振替進捗</th>
-                  <th className="text-left font-medium px-4 py-3">継続</th>
+                  <th className="text-left font-medium px-4 py-3 w-[110px] max-w-[110px]">
+                    口座振替進捗
+                  </th>
+                  <th className="text-left font-medium px-4 py-3 min-w-[280px]">メモ</th>
+                  <th className="text-left font-medium px-4 py-3">契約状況</th>
                   <th className="text-left font-medium px-4 py-3">担当</th>
-                  <th className="text-left font-medium px-4 py-3">メモ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -859,7 +861,9 @@ export default function ClientsView({
                       <td className="px-4 py-3 font-mono text-xs">
                         {r.subscriberId ?? "—"}
                       </td>
-                      <td className="px-4 py-3">{r.payeeName ?? "—"}</td>
+                      <td className="px-4 py-3 truncate max-w-[130px]" title={r.payeeName ?? ""}>
+                        {r.payeeName ?? "—"}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums font-medium">
                         {yen(r.amount)}
                       </td>
@@ -885,8 +889,25 @@ export default function ClientsView({
                         </select>
                         <SyncDot subscriberId={r.subscriberId} field="progress" />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">
+                      <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[110px]" title={r.bankTransferProgress ?? ""}>
                         {r.bankTransferProgress ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={rowNote}
+                          onChange={(e) =>
+                            updateOverride(
+                              r.id,
+                              "note",
+                              e.target.value,
+                              r.subscriberId,
+                            )
+                          }
+                          placeholder="メモを入力"
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 w-full min-w-[260px] focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        />
+                        <SyncDot subscriberId={r.subscriberId} field="note" />
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -938,23 +959,6 @@ export default function ClientsView({
                             )}
                         </select>
                         <SyncDot subscriberId={r.subscriberId} field="marketer" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          value={rowNote}
-                          onChange={(e) =>
-                            updateOverride(
-                              r.id,
-                              "note",
-                              e.target.value,
-                              r.subscriberId,
-                            )
-                          }
-                          placeholder="メモを入力"
-                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-brand-300"
-                        />
-                        <SyncDot subscriberId={r.subscriberId} field="note" />
                       </td>
                     </tr>
                   );
