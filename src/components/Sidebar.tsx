@@ -19,6 +19,7 @@ import {
   Landmark,
   ExternalLink,
   ArrowRightLeft,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,11 @@ const NAV_SECTIONS: NavSection[] = [
     title: "請求",
     items: [
       { href: "/clients", label: "請求書一覧", icon: FileText },
+      {
+        href: "/shareholder-invoices",
+        label: "株主用請求書",
+        icon: Users,
+      },
       {
         href: "/invoicing-sheet",
         label: "請求書作成用スプシ",
