@@ -40,7 +40,7 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
 
   const months = useMemo(
     () =>
-      displayMonths().map((m) => ({
+      displayMonths(year).map((m) => ({
         m,
         key: monthKey(year, m),
         label: monthLabel(year, m),
@@ -49,6 +49,8 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
   );
 
   // 全月合計・入金済み合計・入力済スロット数の集計。
+  // クライアント名は既定値で埋めているので「入力済」判定には使えない。
+  // 金額 / 入金チェック / スプシ URL のいずれかがユーザー由来なら「入力済」扱い。
   const totals = useMemo(() => {
     let totalAmount = 0;
     let paidAmount = 0;
@@ -57,7 +59,8 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
       const md = ensureMonth(store, key);
       md.slots.forEach((s) => {
         const amt = parseAmount(s.amount);
-        if (!s.clientName && amt === 0) return;
+        const engaged = amt > 0 || s.paid || !!s.sheetUrl;
+        if (!engaged) return;
         entries++;
         totalAmount += amt;
         if (s.paid) paidAmount += amt;
@@ -136,7 +139,7 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
           {months.map(({ m, key, label }) => {
             const md = ensureMonth(store, key);
             const filled = md.slots.filter(
-              (s) => s.clientName || parseAmount(s.amount) > 0,
+              (s) => parseAmount(s.amount) > 0 || s.paid || !!s.sheetUrl,
             ).length;
             const monthTotal = md.slots.reduce(
               (acc, s) => acc + parseAmount(s.amount),
