@@ -529,7 +529,7 @@ export default function ClientsView({
         title="請求書"
         subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
-      <div className="shrink-0 p-6 pb-4 space-y-4">
+      <div className="shrink-0 px-6 pt-4 pb-3 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-sm text-slate-500">月表示</div>
           <div className="flex items-center gap-2">
@@ -607,31 +607,31 @@ export default function ClientsView({
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">総ブランド数</div>
-            <div className="text-2xl font-semibold mt-1">{num(totals.brand)}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">総ブランド数</div>
+            <div className="text-xl font-semibold mt-0.5">{num(totals.brand)}</div>
           </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">総店舗数</div>
-            <div className="text-2xl font-semibold mt-1">{num(totals.store)}</div>
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">総店舗数</div>
+            <div className="text-xl font-semibold mt-0.5">{num(totals.store)}</div>
           </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">請求総額</div>
-            <div className="text-2xl font-semibold mt-1">{yen(totals.amount)}</div>
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">請求総額</div>
+            <div className="text-xl font-semibold mt-0.5">{yen(totals.amount)}</div>
           </div>
-          <div className="card p-5">
-            <div className="text-sm text-slate-500">未入金</div>
-            <div className="text-2xl font-semibold mt-1 text-amber-600">
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">未入金</div>
+            <div className="text-xl font-semibold mt-0.5 text-amber-600">
               {yen(totals.unpaid)}
             </div>
-            <div className="text-[11px] text-slate-400 mt-1">
+            <div className="text-[10px] text-slate-400">
               請求書払い · 入金確認済み以外
             </div>
           </div>
         </div>
 
-        <div className="card p-4 flex flex-wrap items-center gap-3">
+        <div className="card p-3 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[240px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -709,10 +709,10 @@ export default function ClientsView({
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
-            <table className="w-full text-sm">
+            <table className="text-sm min-w-max">
               <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
-                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px]">
+                  <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px] whitespace-nowrap">
                     サロン名
                     <HeaderCopyButton
                       title="サロン名を縦一列でコピー"
@@ -724,7 +724,7 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-right font-medium px-4 py-3">
+                  <th className="text-right font-medium px-4 py-3 whitespace-nowrap">
                     ブランド数
                     <HeaderCopyButton
                       title="ブランド数を縦一列でコピー"
@@ -736,7 +736,7 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-right font-medium px-4 py-3">
+                  <th className="text-right font-medium px-4 py-3 whitespace-nowrap">
                     店舗数
                     <HeaderCopyButton
                       title="店舗数を縦一列でコピー"
@@ -748,8 +748,8 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-left font-medium px-4 py-3">振替 / 請求書</th>
-                  <th className="text-left font-medium px-4 py-3">
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">振替 / 請求書</th>
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">
                     加入者識別番号
                     <HeaderCopyButton
                       title="加入者識別番号を縦一列でコピー"
@@ -761,7 +761,7 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-left font-medium px-4 py-3 w-[130px] max-w-[130px]">
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap w-[150px] max-w-[150px]">
                     振込名
                     <HeaderCopyButton
                       title="振込名を縦一列でコピー"
@@ -773,7 +773,7 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-right font-medium px-4 py-3">
+                  <th className="text-right font-medium px-4 py-3 whitespace-nowrap">
                     請求金額 (税込)
                     <HeaderCopyButton
                       title="請求金額 (税込) を縦一列でコピー"
@@ -785,13 +785,13 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-left font-medium px-4 py-3">進捗確認</th>
-                  <th className="text-left font-medium px-4 py-3 w-[110px] max-w-[110px]">
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">進捗確認</th>
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap w-[130px] max-w-[130px]">
                     口座振替進捗
                   </th>
-                  <th className="text-left font-medium px-4 py-3 min-w-[280px]">メモ</th>
-                  <th className="text-left font-medium px-4 py-3">契約状況</th>
-                  <th className="text-left font-medium px-4 py-3">担当</th>
+                  <th className="text-left font-medium px-4 py-3 min-w-[280px] whitespace-nowrap">メモ</th>
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">契約状況</th>
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">担当</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -869,7 +869,7 @@ export default function ClientsView({
                       <td className="px-4 py-3 font-mono text-xs">
                         {r.subscriberId ?? "—"}
                       </td>
-                      <td className="px-4 py-3 truncate max-w-[130px]" title={r.payeeName ?? ""}>
+                      <td className="px-4 py-3 truncate max-w-[150px]" title={r.payeeName ?? ""}>
                         {r.payeeName ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-medium">
@@ -897,7 +897,7 @@ export default function ClientsView({
                         </select>
                         <SyncDot subscriberId={r.subscriberId} field="progress" />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[110px]" title={r.bankTransferProgress ?? ""}>
+                      <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[130px]" title={r.bankTransferProgress ?? ""}>
                         {r.bankTransferProgress ?? "—"}
                       </td>
                       <td className="px-4 py-3">
