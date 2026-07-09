@@ -529,25 +529,7 @@ export default function ClientsView({
         title="請求書"
         subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
       />
-      <div className="shrink-0 px-6 pt-4 pb-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-slate-500">月表示</div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-brand-700 border border-slate-200 rounded-md px-2 py-1 disabled:opacity-60"
-              title="スプレッドシートを直接編集した内容を取り込むために手動再取得"
-            >
-              <RefreshCw
-                className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
-              />
-              シート更新
-            </button>
-            <MonthPicker current={month} />
-          </div>
-        </div>
+      <div className="shrink-0 px-6 pt-3 pb-2 space-y-2">
         {!configured && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-4 py-3">
             GAS連携が未設定です。<code className="font-mono">SHEETS_GAS_URL</code> と
@@ -600,13 +582,6 @@ export default function ClientsView({
             </div>
           </div>
         )}
-        {configured && sheetName && sheetMatched && (
-          <div className="text-[11px] text-slate-500 px-1">
-            接続中のタブ:
-            <code className="font-mono ml-1 text-slate-600">{sheetName}</code>
-          </div>
-        )}
-
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="card p-3">
             <div className="text-xs text-slate-500">総ブランド数</div>
@@ -678,6 +653,22 @@ export default function ClientsView({
               ))}
             </select>
           )}
+          {/* シート更新 + 月ピッカーは右端に集約。独立の「月表示」行を廃止した分の代替。 */}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-brand-700 border border-slate-200 rounded-md px-2 py-1 disabled:opacity-60"
+              title="スプレッドシートを直接編集した内容を取り込むために手動再取得"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+              />
+              シート更新
+            </button>
+            <MonthPicker current={month} />
+          </div>
         </div>
       </div>
       {copyToast && (
@@ -709,7 +700,7 @@ export default function ClientsView({
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
           <div className="overflow-auto flex-1">
-            <table className="text-sm min-w-max">
+            <table className="text-sm w-full min-w-max">
               <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
                   <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px] whitespace-nowrap">
@@ -789,7 +780,9 @@ export default function ClientsView({
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap w-[130px] max-w-[130px]">
                     口座振替進捗
                   </th>
-                  <th className="text-left font-medium px-4 py-3 min-w-[280px] whitespace-nowrap">メモ</th>
+                  {/* メモ列は残余幅を全部吸収するために w-full。他列は content 幅なので、
+                      画面が広いとメモが右端まで伸びる。狭い画面では min-w が効く。 */}
+                  <th className="text-left font-medium px-4 py-3 w-full min-w-[280px] whitespace-nowrap">メモ</th>
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap">契約状況</th>
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap">担当</th>
                 </tr>
