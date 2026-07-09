@@ -699,8 +699,10 @@ export default function ClientsView({
       )}
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="card h-full flex flex-col overflow-hidden">
-          <div className="overflow-auto flex-1">
-            <table className="text-sm w-full min-w-max">
+          {/* 水平スクロールは出さず、コンテナ幅内に収める。
+              コンテンツが超過した場合はセル内で改行/切り詰めで吸収する。 */}
+          <div className="overflow-x-hidden overflow-y-auto flex-1">
+            <table className="text-sm w-full">
               <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide shadow-sm">
                 <tr>
                   <th className="text-left font-medium px-4 py-3 sticky left-0 bg-slate-50 z-30 min-w-[180px] whitespace-nowrap">
@@ -780,9 +782,9 @@ export default function ClientsView({
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap w-[130px] max-w-[130px]">
                     口座振替進捗
                   </th>
-                  {/* メモ列は残余幅を全部吸収するために w-full。他列は content 幅なので、
-                      画面が広いとメモが右端まで伸びる。狭い画面では min-w が効く。 */}
-                  <th className="text-left font-medium px-4 py-3 w-full min-w-[280px] whitespace-nowrap">メモ</th>
+                  {/* メモ列は固定 240px。それ以上必要なら input 内で改行/スクロール。
+                      w-full で残余幅を全部吸収する挙動は水平スクロール発生の原因になるので外している。 */}
+                  <th className="text-left font-medium px-4 py-3 w-[240px] min-w-[240px] whitespace-nowrap">メモ</th>
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap">契約状況</th>
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap">担当</th>
                 </tr>
