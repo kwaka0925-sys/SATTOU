@@ -36,6 +36,10 @@ export type DashboardTotals = {
   transferCount: number;
   invoiceCount: number;
   cancelledCount: number;
+  // 請求書払いの未入金 (進捗確認が「入金確認済み」でも「請求なし」でもない行) の
+  // 件数と金額。/clients と同じ判定ロジック。
+  unpaidCount: number;
+  unpaidAmount: number;
 };
 
 export type SheetInvoice = Omit<Invoice, "clientId"> & {
@@ -369,6 +373,8 @@ export async function fetchDashboardTotals(
     transferCount: 0,
     invoiceCount: 0,
     cancelledCount: 0,
+    unpaidCount: 0,
+    unpaidAmount: 0,
   };
   const cfg = backendConfig("billing");
   if (!cfg.url || !cfg.token) return empty;
@@ -429,6 +435,19 @@ export async function fetchDashboardTotals(
       cancelledCount: rows.filter((r) =>
         (r.subscriptionStatus ?? "").includes("解約"),
       ).length,
+      // /clients の未入金判定に揃える: 請求書払い かつ 「入金確認済み」でも「請求なし」でもない行。
+      unpaidCount: rows.filter((r) => {
+        const pm = (r.paymentMethod ?? "").includes("請求書");
+        const progress = (r.progress ?? "").trim();
+        return pm && progress !== "入金確認済み" && progress !== "請求なし";
+      }).length,
+      unpaidAmount: rows.reduce((s, r) => {
+        const pm = (r.paymentMethod ?? "").includes("請求書");
+        const progress = (r.progress ?? "").trim();
+        const isUnpaid =
+          pm && progress !== "入金確認済み" && progress !== "請求なし";
+        return isUnpaid ? s + parseAmount(r.amount) : s;
+      }, 0),
     };
   } catch (err) {
     console.warn("[sheets] fetch failed", err);

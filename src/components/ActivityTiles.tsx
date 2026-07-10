@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, Store, UserX } from "lucide-react";
-import { num } from "@/lib/format";
+import { AlertCircle, Sparkles, Store, UserX } from "lucide-react";
+import { num, yen } from "@/lib/format";
 import StatCard from "./StatCard";
 
 type Props = {
   month: string; // YYYY-MM
   cancelledCountFromSheet: number;
+  // /clients と同じ判定で計算した当月の請求書払い未入金件数と金額。
+  // 0 の場合はタイルを表示しつつ 0 件表示する。
+  unpaidCount: number;
+  unpaidAmount: number;
 };
 
 type DatedRecord = { installDate?: string };
@@ -39,7 +43,12 @@ function cancelledCountLocal(): number {
   }
 }
 
-export default function ActivityTiles({ month, cancelledCountFromSheet }: Props) {
+export default function ActivityTiles({
+  month,
+  cancelledCountFromSheet,
+  unpaidCount,
+  unpaidAmount,
+}: Props) {
   const [newCount, setNewCount] = useState<number>(0);
   const [addCount, setAddCount] = useState<number>(0);
   const [cancelLocal, setCancelLocal] = useState<number>(0);
@@ -60,7 +69,7 @@ export default function ActivityTiles({ month, cancelledCountFromSheet }: Props)
       : "—";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
       <StatCard
         size="sm"
         accent="success"
@@ -84,6 +93,24 @@ export default function ActivityTiles({ month, cancelledCountFromSheet }: Props)
         value={`${num(cancelled)} 件`}
         icon={<UserX className="w-4 h-4" />}
         hint={cancelledHint}
+      />
+      {/* 請求書払いの未入金は「件数」と「金額」を別タイルに分けて表示。
+          /clients の未入金 KPI と同じ値。 */}
+      <StatCard
+        size="sm"
+        accent="warning"
+        label="未入金件数"
+        value={`${num(unpaidCount)} 件`}
+        icon={<AlertCircle className="w-4 h-4" />}
+        hint="請求書払い · 入金確認済み以外"
+      />
+      <StatCard
+        size="sm"
+        accent="warning"
+        label="未入金金額"
+        value={yen(unpaidAmount)}
+        icon={<AlertCircle className="w-4 h-4" />}
+        hint="請求書払い · 入金確認済み以外"
       />
     </div>
   );

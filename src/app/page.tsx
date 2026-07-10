@@ -148,12 +148,17 @@ export default async function Page({
           </div>
         </section>
 
-        {/* Section: 実績 (3 activity tiles from localStorage + sheet) */}
+        {/* Section: 実績 — 入退会 + 請求書払い未入金の当月ステータス */}
         <section className="space-y-3">
-          <SectionHeading title="実績" subtitle="当月の入退会サマリー" />
+          <SectionHeading
+            title="実績"
+            subtitle="当月の入退会 + 請求書払い未入金"
+          />
           <ActivityTiles
             month={month}
             cancelledCountFromSheet={sheetTotals.cancelledCount}
+            unpaidCount={sheetTotals.unpaidCount}
+            unpaidAmount={sheetTotals.unpaidAmount}
           />
         </section>
 
