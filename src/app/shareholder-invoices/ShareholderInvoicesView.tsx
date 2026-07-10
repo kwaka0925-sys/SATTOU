@@ -138,8 +138,12 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {months.map(({ m, key, label }) => {
             const md = ensureMonth(store, key);
-            const filled = md.slots.filter(
-              (s) => parseAmount(s.amount) > 0 || s.paid || !!s.sheetUrl,
+            // 入金件数 = 入金チェック ON の枠。
+            // 未入金件数 = 入金チェック OFF かつ金額 or URL が入っている枠
+            //   (何も触っていない完全な空枠は「未入金」ではなく「未入力」扱いとして数えない)。
+            const paidCount = md.slots.filter((s) => s.paid).length;
+            const unpaidCount = md.slots.filter(
+              (s) => !s.paid && (parseAmount(s.amount) > 0 || !!s.sheetUrl),
             ).length;
             const monthTotal = md.slots.reduce(
               (acc, s) => acc + parseAmount(s.amount),
@@ -156,21 +160,20 @@ export default function ShareholderInvoicesView({ year: initialYear }: Props) {
                 href={`/shareholder-invoices/${key}`}
                 className="card p-4 space-y-2 hover:bg-slate-50 hover:border-brand-300 transition-colors group"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-semibold group-hover:text-brand-700">
                     <Users className="w-4 h-4 text-brand-600" />
                     {label}
                   </div>
-                  <div
-                    className={`text-[11px] px-2 py-0.5 rounded-full ${
-                      filled === SLOTS_PER_MONTH
-                        ? "bg-emerald-50 text-emerald-700"
-                        : filled > 0
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {filled}/{SLOTS_PER_MONTH} 入力済
+                  {/* 入金/未入金の件数バッジ。0 件でも並べて表示することで
+                      全月同じ見た目に揃える。 */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 whitespace-nowrap">
+                      {paidCount}件入金
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 whitespace-nowrap">
+                      {unpaidCount}件未入金
+                    </span>
                   </div>
                 </div>
                 <div className="text-lg font-semibold tabular-nums">
