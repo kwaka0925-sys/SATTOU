@@ -89,6 +89,13 @@ type SyncState =
   | SyncSuccess
   | { status: "error"; message: string; previous?: SyncSuccess };
 
+// Meta 同期成功後にシート S 列へ書き戻す処理の状態表示。
+type WritebackState =
+  | { status: "idle" }
+  | { status: "writing"; count: number }
+  | { status: "done"; updated: number; missing: number; at: string }
+  | { status: "error"; message: string };
+
 // localStorage キー: 月ごとに前回の同期結果をキャッシュしておく。
 // 開いた瞬間にキャッシュを描画してから背景でリフレッシュを走らせる。
 const SYNC_CACHE_KEY = "sattou-meta-ads-sync-cache";
@@ -144,6 +151,7 @@ export default function AdsView({
   const [since, setSince] = useState(defaultRange.since);
   const [until, setUntil] = useState(defaultRange.until);
   const [sync, setSync] = useState<SyncState>({ status: "idle" });
+  const [writeback, setWriteback] = useState<WritebackState>({ status: "idle" });
 
   // 「同期済み」の値を効かせる対象。loading 中もキャッシュ表示を維持したいので
   // success と loading.previous の両方を見る。
@@ -217,6 +225,57 @@ export default function AdsView({
         const cache = loadSyncCache();
         cache[month] = success;
         persistSyncCache(cache);
+
+        // Meta 値をシートの S 列 (adSpend) に書き戻す。
+        // 対応する行が rows に見つかった Meta 結果だけを送る (subscriberId が必要)。
+        // シート更新は非同期で背景実行し、成功/失敗はステータス表示に反映する。
+        const items = success.results
+          .filter((r) => !r.error)
+          .map((r) => {
+            const row = rows.find((x) => x.id === r.clientKey);
+            const sid = row?.subscriberId?.trim();
+            if (!sid) return null;
+            return {
+              subscriberId: sid,
+              field: "adSpend",
+              value: Math.round(r.spend),
+            };
+          })
+          .filter((v): v is NonNullable<typeof v> => v != null);
+        if (items.length > 0) {
+          setWriteback({ status: "writing", count: items.length });
+          try {
+            const wbRes = await fetch("/api/invoices/update-batch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ month, items }),
+            });
+            const wbData = (await wbRes.json().catch(() => ({}))) as {
+              updated?: number;
+              missing?: string[];
+              error?: string;
+            };
+            if (!wbRes.ok || wbData.error) {
+              setWriteback({
+                status: "error",
+                message: wbData.error ?? `HTTP ${wbRes.status}`,
+              });
+            } else {
+              setWriteback({
+                status: "done",
+                updated: wbData.updated ?? 0,
+                missing: wbData.missing?.length ?? 0,
+                at: new Date().toISOString(),
+              });
+            }
+          } catch (wbErr) {
+            setWriteback({
+              status: "error",
+              message:
+                wbErr instanceof Error ? wbErr.message : "書き戻しに失敗しました",
+            });
+          }
+        }
       } catch (err) {
         setSync((prev) => ({
           status: "error",
@@ -232,7 +291,7 @@ export default function AdsView({
         }
       }
     },
-    [since, until, month],
+    [since, until, month, rows],
   );
 
   // マウント時にキャッシュから前回結果を復元し、古ければ裏でリフレッシュする。
@@ -586,6 +645,38 @@ export default function AdsView({
                     表示中の値は前回同期 ({formatSyncedAt(sync.previous.syncedAt)}) のキャッシュです
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Meta → シート S 列の書き戻し状態。同期成功直後に表示。 */}
+          {writeback.status === "writing" && (
+            <div className="text-xs text-slate-500 flex items-center gap-2 border-t border-slate-100 pt-2">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              シートへ広告費を書き戻し中... ({writeback.count} 社)
+            </div>
+          )}
+          {writeback.status === "done" && (
+            <div className="text-xs text-emerald-700 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+              <span className="font-medium">
+                ✓ シート S 列に反映しました ({writeback.updated} 社更新)
+              </span>
+              {writeback.missing > 0 && (
+                <span className="text-amber-700">
+                  {writeback.missing} 社は識別番号がシートに見つからずスキップ
+                </span>
+              )}
+            </div>
+          )}
+          {writeback.status === "error" && (
+            <div className="text-xs text-rose-700 flex items-start gap-2 border-t border-slate-100 pt-2">
+              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-medium">シート書き戻しに失敗しました</div>
+                <div className="text-rose-600 mt-0.5">{writeback.message}</div>
+                <div className="text-slate-500 mt-0.5">
+                  GAS の doPost に adSpend 書き込み対応が反映されていない可能性があります (新しいバージョンでデプロイし直してください)。
+                </div>
               </div>
             </div>
           )}

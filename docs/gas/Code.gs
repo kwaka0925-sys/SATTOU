@@ -118,8 +118,9 @@ function doGet(e) {
   return jsonResponse({ month, sheet: match.getName(), rows });
 }
 
-// 書き込み許可する列。UI が触るドロップダウン/テキスト入力のみを対象にし、
-// 集計計算などが入る列 (金額, 広告費, 運用代行費など) は誤書き込み防止のため除外。
+// 書き込み許可する列。UI が触るドロップダウン/テキスト入力および Meta 同期で
+// 上書きする広告費列を対象にする。金額 (G) や運用代行費 (U/V) など集計計算式が
+// 入っている可能性のある列は誤書き込み防止のため除外。
 const WRITEABLE_FIELDS = {
   paymentMethod: COLUMN_INDEX.paymentMethod,        // D: 振替 / 請求書
   progress: COLUMN_INDEX.progress,                  // H: 進捗確認
@@ -127,6 +128,7 @@ const WRITEABLE_FIELDS = {
   note: COLUMN_INDEX.note,                          // O: メモ
   subscriptionStatus: COLUMN_INDEX.subscriptionStatus, // P: 継続
   marketer: COLUMN_INDEX.marketer,                  // Q: 担当
+  adSpend: COLUMN_INDEX.adSpend,                    // S: 広告費 (Meta 同期の書き戻し先)
 };
 
 // UI から呼ばれるセル更新 API。
@@ -145,14 +147,20 @@ function doPost(e) {
     return jsonResponse({ error: 'unauthorized' });
   }
 
-  if (params.action !== 'updateCell') {
-    return jsonResponse({ error: 'unknown action: ' + params.action });
+  if (params.action === 'updateCell') {
+    return handleUpdateCell_(params);
   }
+  if (params.action === 'updateCells') {
+    return handleUpdateCells_(params);
+  }
+  return jsonResponse({ error: 'unknown action: ' + params.action });
+}
 
+// 単セル更新。旧 UI (ClientsView の SyncDot) が使う既存 API。
+function handleUpdateCell_(params) {
   const month = String(params.month || '').trim();
   const subscriberId = String(params.subscriberId || '').trim();
   const field = String(params.field || '').trim();
-  // value は null/undefined を空文字扱いにする (メモクリアなど)
   const value = params.value == null ? '' : String(params.value);
 
   if (!month || !subscriberId || !field) {
@@ -184,6 +192,75 @@ function doPost(e) {
     sheet: sheet.getName(),
     rowIndex: rowIndex,
     column: col,
+  });
+}
+
+// バッチ更新。Meta 同期が 68 社分の広告費をまとめて書き戻すのに使う。
+// リクエスト: { token, action: "updateCells", month, items: [{subscriberId, field, value}, ...] }
+// レスポンス: { ok: true, sheet, updated: N, missing: [...] }
+// 呼び出し 1 回で全件を処理するので、GAS のレート制限に引っかかりにくい。
+function handleUpdateCells_(params) {
+  const month = String(params.month || '').trim();
+  const items = Array.isArray(params.items) ? params.items : null;
+  if (!month || !items) {
+    return jsonResponse({ error: 'month and items[] are required' });
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = resolveSheet_(ss, month);
+  if (!sheet) {
+    return jsonResponse({ error: 'sheet not found for ' + month });
+  }
+
+  // subscriberId → row index の逆引きマップを 1 度だけ構築。
+  const lastRow = sheet.getLastRow();
+  const idMap = {};
+  if (lastRow >= DATA_START_ROW) {
+    const range = sheet.getRange(
+      DATA_START_ROW,
+      COLUMN_INDEX.subscriberId,
+      lastRow - DATA_START_ROW + 1,
+      1,
+    );
+    const values = range.getValues();
+    for (var i = 0; i < values.length; i++) {
+      var v = values[i][0];
+      if (v == null || v === '') continue;
+      var key = String(v).trim();
+      if (!idMap.hasOwnProperty(key)) {
+        idMap[key] = DATA_START_ROW + i;
+      }
+    }
+  }
+
+  var updated = 0;
+  var missing = [];
+  var invalid = [];
+  for (var j = 0; j < items.length; j++) {
+    var item = items[j];
+    var sid = String((item && item.subscriberId) || '').trim();
+    var field = String((item && item.field) || '').trim();
+    var value = item && item.value == null ? '' : String(item.value);
+    if (!sid || !field) continue;
+    if (!WRITEABLE_FIELDS.hasOwnProperty(field)) {
+      invalid.push({ subscriberId: sid, field: field });
+      continue;
+    }
+    var rowIndex = idMap[sid];
+    if (!rowIndex) {
+      missing.push(sid);
+      continue;
+    }
+    var col = WRITEABLE_FIELDS[field];
+    sheet.getRange(rowIndex, col).setValue(value);
+    updated++;
+  }
+  return jsonResponse({
+    ok: true,
+    sheet: sheet.getName(),
+    updated: updated,
+    missing: missing,
+    invalid: invalid,
   });
 }
 

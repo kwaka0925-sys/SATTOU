@@ -3,11 +3,11 @@ import { revalidateTag } from "next/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// セル更新はほぼ即答なので短めで OK。GAS 側は 1〜2 秒で返る。
-export const maxDuration = 30;
+// バッチ更新は 60〜150 件を 1 回で処理するので単セルよりは長め。GAS 側は
+// 数秒〜十数秒。Vercel Pro のマージンとして 60 秒を確保。
+export const maxDuration = 60;
 
-// UI からのセル更新リクエスト。1 セルずつ即時反映する。
-// GAS 側の WRITEABLE_FIELDS と同じ集合を許可する。
+// UI がまとめて更新するセルの集合。GAS 側 WRITEABLE_FIELDS と同じ集合。
 const ALLOWED_FIELDS = new Set([
   "paymentMethod",
   "progress",
@@ -18,32 +18,47 @@ const ALLOWED_FIELDS = new Set([
   "adSpend",
 ]);
 
-type Body = {
-  month?: string;
+type Item = {
   subscriberId?: string;
   field?: string;
-  value?: string;
+  value?: string | number;
+};
+
+type Body = {
+  month?: string;
+  items?: Item[];
 };
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Body;
-  const { month, subscriberId, field, value } = body;
+  const { month, items } = body;
 
-  if (!month || !subscriberId || !field) {
+  if (!month || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json(
-      { error: "month, subscriberId, field are required" },
-      { status: 400 },
-    );
-  }
-  if (!ALLOWED_FIELDS.has(field)) {
-    return NextResponse.json(
-      { error: `field not allowed: ${field}` },
+      { error: "month and items[] are required" },
       { status: 400 },
     );
   }
 
-  // 請求書 GAS を優先し、無ければ既定の SHEETS_GAS_URL にフォールバック
-  // (どちらか一方だけ設定してもよいように)。
+  // 許可フィールドだけに絞り込む。呼び出し側のミスで書けない列に投げ込まれても
+  // ここで弾く。
+  const cleaned = items
+    .map((it) => ({
+      subscriberId: String(it.subscriberId ?? "").trim(),
+      field: String(it.field ?? "").trim(),
+      value: it.value == null ? "" : String(it.value),
+    }))
+    .filter(
+      (it) => it.subscriberId && it.field && ALLOWED_FIELDS.has(it.field),
+    );
+
+  if (cleaned.length === 0) {
+    return NextResponse.json(
+      { error: "no valid items after allowlist filter" },
+      { status: 400 },
+    );
+  }
+
   const url =
     process.env.SHEETS_GAS_URL_BILLING || process.env.SHEETS_GAS_URL;
   const token =
@@ -52,7 +67,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "GAS 連携が未設定です。Vercel に SHEETS_GAS_URL_BILLING / SHEETS_GAS_TOKEN_BILLING (または SHEETS_GAS_URL / SHEETS_GAS_TOKEN) を登録してください。",
+          "GAS 連携が未設定です。Vercel に SHEETS_GAS_URL_BILLING / SHEETS_GAS_TOKEN_BILLING を登録してください。",
       },
       { status: 500 },
     );
@@ -64,15 +79,12 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token,
-        action: "updateCell",
+        action: "updateCells",
         month,
-        subscriberId,
-        field,
-        value: value ?? "",
+        items: cleaned,
       }),
       cache: "no-store",
     });
-    // GAS が HTML エラーページを返した場合の耐障害処理。
     const text = await res.text();
     if (!res.ok) {
       return NextResponse.json(
@@ -88,9 +100,8 @@ export async function POST(req: NextRequest) {
           { status: 502 },
         );
       }
-      // シート書き戻し成功時に fetchInvoicesFromSheetWithMeta の
-      // データキャッシュを無効化。次に /clients や /ads を表示すると
-      // 60 秒キャッシュを待たず、書き戻した内容が反映される。
+      // シート書き込み成功後は fetchInvoicesFromSheetWithMeta のキャッシュを
+      // 無効化して、次に /ads や /clients を開いた時に新しい値を取り直させる。
       revalidateTag("invoices-sheet");
       return NextResponse.json(data);
     } catch {
