@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { yen, pct } from "@/lib/format";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
@@ -70,20 +70,64 @@ type SyncResult = {
   error?: string;
 };
 
+type SyncSuccess = {
+  status: "success";
+  results: SyncResult[];
+  matched: number;
+  total: number;
+  totalSpend: number;
+  errorCount: number;
+  since: string;
+  until: string;
+  // 同期完了時刻 (ISO 文字列)。UI では「M月D日 HH時MM分」に整形して表示する。
+  syncedAt: string;
+};
+
 type SyncState =
   | { status: "idle" }
-  | { status: "loading" }
-  | {
-      status: "success";
-      results: SyncResult[];
-      matched: number;
-      total: number;
-      totalSpend: number;
-      errorCount: number;
-      since: string;
-      until: string;
-    }
-  | { status: "error"; message: string };
+  | { status: "loading"; previous?: SyncSuccess }
+  | SyncSuccess
+  | { status: "error"; message: string; previous?: SyncSuccess };
+
+// localStorage キー: 月ごとに前回の同期結果をキャッシュしておく。
+// 開いた瞬間にキャッシュを描画してから背景でリフレッシュを走らせる。
+const SYNC_CACHE_KEY = "sattou-meta-ads-sync-cache";
+
+// 同期が古すぎるかの判定に使うしきい値。これより古ければ自動リフレッシュを走らせる。
+const AUTO_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 分
+
+type SyncCache = Record<string, SyncSuccess>;
+
+function loadSyncCache(): SyncCache {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(SYNC_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistSyncCache(cache: SyncCache) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SYNC_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore quota
+  }
+}
+
+function formatSyncedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${m}月${day}日 ${hh}時${mm}分`;
+}
 
 export default function AdsView({
   rows,
@@ -101,52 +145,113 @@ export default function AdsView({
   const [until, setUntil] = useState(defaultRange.until);
   const [sync, setSync] = useState<SyncState>({ status: "idle" });
 
+  // 「同期済み」の値を効かせる対象。loading 中もキャッシュ表示を維持したいので
+  // success と loading.previous の両方を見る。
+  const activeSuccess: SyncSuccess | null = useMemo(() => {
+    if (sync.status === "success") return sync;
+    if (sync.status === "loading" && sync.previous) return sync.previous;
+    if (sync.status === "error" && sync.previous) return sync.previous;
+    return null;
+  }, [sync]);
+
   const syncMap = useMemo(() => {
-    if (sync.status !== "success") return new Map<string, number>();
+    if (!activeSuccess) return new Map<string, number>();
     const m = new Map<string, number>();
-    sync.results.forEach((r) => {
+    activeSuccess.results.forEach((r) => {
       if (!r.error) m.set(r.clientKey, r.spend);
     });
     return m;
-  }, [sync]);
+  }, [activeSuccess]);
 
-  const handleSync = async () => {
-    setSync({ status: "loading" });
-    try {
-      const params = new URLSearchParams({ since, until, month });
-      const res = await fetch(`/api/meta-ads-sync?${params.toString()}`);
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
-          error?: string;
+  // handleSync を useCallback にしないと、下の useEffect(オートリフレッシュ) の
+  // dep 配列がキャプチャする値がずれる。since/until は日付ピッカーで変わり得るので
+  // deps に入れる。
+  const handleSync = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      setSync((prev) => {
+        // silent (自動リフレッシュ) 時は既存表示を残して裏で読み直す。
+        // 手動同期時は「同期中...」ボタン表示に切り替わる (previous を渡さない)。
+        const previous =
+          prev.status === "success"
+            ? prev
+            : prev.status === "loading"
+              ? prev.previous
+              : prev.status === "error"
+                ? prev.previous
+                : undefined;
+        return { status: "loading", previous };
+      });
+      try {
+        const params = new URLSearchParams({ since, until, month });
+        const res = await fetch(`/api/meta-ads-sync?${params.toString()}`);
+        if (!res.ok) {
+          const err = (await res
+            .json()
+            .catch(() => ({ error: "Unknown" }))) as {
+            error?: string;
+          };
+          throw new Error(err.error ?? `HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as {
+          matched: number;
+          total: number;
+          totalSpend: number;
+          errorCount: number;
+          results: SyncResult[];
+          since: string;
+          until: string;
         };
-        throw new Error(err.error ?? `HTTP ${res.status}`);
+        const success: SyncSuccess = {
+          status: "success",
+          results: data.results,
+          matched: data.matched,
+          total: data.total,
+          totalSpend: data.totalSpend,
+          errorCount: data.errorCount,
+          since: data.since,
+          until: data.until,
+          syncedAt: new Date().toISOString(),
+        };
+        setSync(success);
+        // 月ごとにキャッシュ。次回開いた瞬間からこの値を出す。
+        const cache = loadSyncCache();
+        cache[month] = success;
+        persistSyncCache(cache);
+      } catch (err) {
+        setSync((prev) => ({
+          status: "error",
+          message: err instanceof Error ? err.message : "Unknown error",
+          previous:
+            prev.status === "loading" ? prev.previous : undefined,
+        }));
+        // silent モードでエラーになってもトーストなどは出さない。
+        // 前回のキャッシュがそのまま表示されているので、ユーザーが気づいたら
+        // 手動で押し直せば良い。
+        if (!opts?.silent) {
+          // no-op: error 状態が既に UI に出るので追加処理不要
+        }
       }
-      const data = (await res.json()) as {
-        matched: number;
-        total: number;
-        totalSpend: number;
-        errorCount: number;
-        results: SyncResult[];
-        since: string;
-        until: string;
-      };
-      setSync({
-        status: "success",
-        results: data.results,
-        matched: data.matched,
-        total: data.total,
-        totalSpend: data.totalSpend,
-        errorCount: data.errorCount,
-        since: data.since,
-        until: data.until,
-      });
-    } catch (err) {
-      setSync({
-        status: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
+    },
+    [since, until, month],
+  );
+
+  // マウント時にキャッシュから前回結果を復元し、古ければ裏でリフレッシュする。
+  // 月切り替え (props の month 変化) 時にも再走。
+  useEffect(() => {
+    const cache = loadSyncCache();
+    const cached = cache[month];
+    if (cached) {
+      setSync(cached);
+      const age = Date.now() - new Date(cached.syncedAt).getTime();
+      if (age > AUTO_REFRESH_THRESHOLD_MS) {
+        void handleSync({ silent: true });
+      }
+    } else {
+      // 初めて開く月はキャッシュがない → 自動同期を裏で走らせる。
+      void handleSync({ silent: true });
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
 
   const applyPreset = (
     kind:
@@ -433,7 +538,7 @@ export default function AdsView({
             </div>
             <button
               type="button"
-              onClick={handleSync}
+              onClick={() => handleSync()}
               disabled={sync.status === "loading"}
               className="btn-primary inline-flex items-center gap-2 text-xs disabled:opacity-60 disabled:cursor-not-allowed ml-auto"
             >
@@ -444,19 +549,28 @@ export default function AdsView({
             </button>
           </div>
 
-          {sync.status === "success" && (
+          {/* success 表示は "現在の sync" が success の時だけでなく、
+              loading/error の裏にキャッシュされている previous がある時も出す。
+              「開いた瞬間に前回の値が見える + 最終同期時刻」を実現するため。 */}
+          {activeSuccess && (
             <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-2">
               <span className="text-emerald-700 font-medium">
-                ✓ {sync.since} 〜 {sync.until} の広告費を同期しました
+                ✓ 最終同期: {formatSyncedAt(activeSuccess.syncedAt)}
+              </span>
+              <span className="text-slate-500">
+                期間 {activeSuccess.since} 〜 {activeSuccess.until}
               </span>
               <span>
-                対象 {sync.matched} 社 / 合計 {yen(sync.totalSpend)}
+                対象 {activeSuccess.matched} 社 / 合計 {yen(activeSuccess.totalSpend)}
               </span>
-              {sync.errorCount > 0 && (
+              {activeSuccess.errorCount > 0 && (
                 <span className="inline-flex items-center gap-1 text-amber-700">
                   <AlertTriangle className="w-3 h-3" />
-                  {sync.errorCount} 社でエラー
+                  {activeSuccess.errorCount} 社でエラー
                 </span>
+              )}
+              {sync.status === "loading" && (
+                <span className="text-slate-400">最新に更新中...</span>
               )}
             </div>
           )}
@@ -467,6 +581,11 @@ export default function AdsView({
               <div>
                 <div className="font-medium">同期に失敗しました</div>
                 <div className="text-rose-600 mt-0.5">{sync.message}</div>
+                {sync.previous && (
+                  <div className="text-slate-500 mt-0.5">
+                    表示中の値は前回同期 ({formatSyncedAt(sync.previous.syncedAt)}) のキャッシュです
+                  </div>
+                )}
               </div>
             </div>
           )}
