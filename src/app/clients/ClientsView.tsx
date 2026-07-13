@@ -506,17 +506,18 @@ export default function ClientsView({
     (acc, r) => {
       const rowPm = effectivePaymentMethod(r);
       const rowProgress = effectiveProgress(r);
-      // 未入金は「請求書払い」の中で「入金確認済み」でない金額のみを集計。
-      // 口座振替は運用上「入金確認済み」のステータス更新を行わないため、
-      // 集計から完全に除外する。「請求なし」は請求自体が無いので同様に除外。
+      // 請求総額は「請求書払い」の行だけを合算する。口座振替は SATTOU 側では
+      // 請求書を発行しないので、請求総額の対象外にしたい (2026-07 時点の運用ルール)。
+      // 未入金も同じ理由で「請求書払いのうち入金確認済みでも請求なしでもない」金額のみ。
       const isInvoicePm = rowPm === "請求書";
       const isPaid = rowProgress === "入金確認済み";
       const isNoBill = rowProgress === "請求なし";
+      const countsAsBilled = isInvoicePm && !isNoBill;
       const countsAsUnpaid = isInvoicePm && !isPaid && !isNoBill;
       return {
         brand: acc.brand + (r.brandCount ?? 0),
         store: acc.store + (r.storeCount ?? 0),
-        amount: acc.amount + r.amount,
+        amount: acc.amount + (countsAsBilled ? r.amount : 0),
         unpaid: acc.unpaid + (countsAsUnpaid ? r.amount : 0),
       };
     },
@@ -594,6 +595,9 @@ export default function ClientsView({
           <div className="card p-3">
             <div className="text-xs text-slate-500">請求総額</div>
             <div className="text-xl font-semibold mt-0.5">{yen(totals.amount)}</div>
+            <div className="text-[10px] text-slate-400">
+              請求書払いのみ · 請求なし以外
+            </div>
           </div>
           <div className="card p-3">
             <div className="text-xs text-slate-500">未入金</div>
