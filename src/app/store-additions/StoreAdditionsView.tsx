@@ -6,24 +6,49 @@ import { Plus, Search, Store as StoreIcon, Trash2 } from "lucide-react";
 import { num } from "@/lib/format";
 
 const STORAGE_KEY = "sattou-store-additions";
-// 初回表示時に既定リストを流し込むための「もう投入した」マーカー。
-// これを見て「未投入 & storage 空」の時だけ SEED を反映する。
-// ユーザーが全件削除した後に自動復元しないよう独立のフラグにしている。
-const SEEDED_KEY = "sattou-store-additions-seeded-v1";
 
-// スプレッドシートから受け取ったアイケアラボの 5 月店舗追加分。
-// 導入日は個別の日付が未指定なので 2026-05-01 で仮置き。ユーザーは編集ボタンから
-// 各店舗の実際の導入日に修正できる。
-const DEFAULT_STORES_INSTALL_DATE = "2026-05-01";
-const DEFAULT_STORES: Array<{ brand: string; store: string }> = [
-  { brand: "アイケアラボ", store: "アイケアLaBo武蔵小山店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo立川店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo浦安駅前店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo千葉駅前店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo郡山支店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo奈良新大宮店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo高松店" },
-  { brand: "アイケアラボ", store: "アイケアLaBo前橋店" },
+// スプレッドシートから受け取ったアイケアラボの月別店舗追加分。
+// バッチごとに独立の「投入済み」フラグを持つ。既に他バッチをシード済みでも、
+// 新しいバッチが追加された時にそれだけを自動投入できる仕組み。
+// 導入日はまとめて月初 1 日で仮置き。個別の日付は編集ボタンから修正可能。
+type SeedBatch = {
+  key: string; // 投入済みフラグの localStorage キー
+  installDate: string;
+  stores: Array<{ brand: string; store: string }>;
+};
+
+const SEED_BATCHES: SeedBatch[] = [
+  {
+    key: "sattou-store-additions-seeded-v1",
+    installDate: "2026-05-01",
+    stores: [
+      { brand: "アイケアラボ", store: "アイケアLaBo武蔵小山店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo立川店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo浦安駅前店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo千葉駅前店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo郡山支店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo奈良新大宮店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo高松店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo前橋店" },
+    ],
+  },
+  {
+    key: "sattou-store-additions-seeded-v2-2026-06",
+    installDate: "2026-06-01",
+    stores: [
+      { brand: "アイケアラボ", store: "アイケアLaBo岡山店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo日立大甕店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo岐阜駅前店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo経堂店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo伏見店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo刈谷店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo天満扇町店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo元町店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo赤羽店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo駒沢公園通り店" },
+      { brand: "アイケアラボ", store: "アイケアLaBo中目黒店" },
+    ],
+  },
 ];
 
 type HPBValue = "あり" | "なし";
@@ -87,31 +112,38 @@ export default function StoreAdditionsView({ year }: Props) {
 
   useEffect(() => {
     try {
+      // 既存の保存データを読み込み。無ければ空から開始。
       const stored = window.localStorage.getItem(STORAGE_KEY);
+      let current: StoreAddition[] = [];
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setRegs(parsed);
-          return;
-        }
+        if (Array.isArray(parsed)) current = parsed;
       }
-      // 保存データが無く、シード未投入なら DEFAULT_STORES を反映する。
-      // ユーザーが全件削除しても再投入しないよう SEEDED_KEY で 1 度きりにする。
-      const seeded = window.localStorage.getItem(SEEDED_KEY);
-      if (!seeded) {
-        const now = new Date().toISOString();
-        const seededList: StoreAddition[] = DEFAULT_STORES.map((d) => ({
+
+      // 各シードバッチについて「まだ投入されていなければ」その分だけ追記する。
+      // これで v1 (5月分) を投入済みのユーザーも v2 (6月分) を追加受領できる。
+      // 各バッチのフラグは独立なので、削除後の再投入も起きない。
+      const now = new Date().toISOString();
+      let mutated = false;
+      for (const batch of SEED_BATCHES) {
+        if (window.localStorage.getItem(batch.key)) continue;
+        const additions: StoreAddition[] = batch.stores.map((d) => ({
           id: newId(),
           brand: d.brand,
           store: d.store,
-          installDate: DEFAULT_STORES_INSTALL_DATE,
+          installDate: batch.installDate,
           joinType: "システム＋マーケ",
           hpbIntegrated: "なし",
           createdAt: now,
         }));
-        setRegs(seededList);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seededList));
-        window.localStorage.setItem(SEEDED_KEY, "1");
+        current = [...current, ...additions];
+        window.localStorage.setItem(batch.key, "1");
+        mutated = true;
+      }
+
+      setRegs(current);
+      if (mutated) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
       }
     } catch {
       // ignore
