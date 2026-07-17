@@ -6,13 +6,13 @@ import { Plus, Search, Store as StoreIcon, Trash2 } from "lucide-react";
 import { num } from "@/lib/format";
 
 const STORAGE_KEY = "sattou-store-additions";
-// 既にシード済みの店舗の joinType を「システムのみ」に一括変更するマイグレーション。
-// 1 度だけ実行する (フラグを立てて再実行させない)。
-const MIGRATION_JOINTYPE_SYSTEMONLY_V1 =
-  "sattou-store-additions-migration-jointype-systemonly-v1";
+// 既存 (旧スキーマ: joinType あり) の localStorage エントリーを一度だけ
+// 新スキーマ (joinType 削除 + subscriberId 追加) に変換するためのフラグ。
+// このフラグを立てるのは変換処理を実行した後、1 度きり。
+const MIGRATION_SUBSCRIBER_V1 =
+  "sattou-store-additions-migration-subscriberid-v1";
 
 type HPBValue = "あり" | "なし";
-type JoinType = "システム＋マーケ" | "システムのみ" | "マーケのみ";
 
 // スプレッドシートから受け取ったアイケアラボの月別店舗追加分。
 // バッチごとに独立の「投入済み」フラグを持つ。既に他バッチをシード済みでも、
@@ -21,7 +21,6 @@ type JoinType = "システム＋マーケ" | "システムのみ" | "マーケ�
 type SeedBatch = {
   key: string; // 投入済みフラグの localStorage キー
   installDate: string;
-  joinType: JoinType;
   stores: Array<{ brand: string; store: string }>;
 };
 
@@ -29,7 +28,6 @@ const SEED_BATCHES: SeedBatch[] = [
   {
     key: "sattou-store-additions-seeded-v1",
     installDate: "2026-05-01",
-    joinType: "システムのみ",
     stores: [
       { brand: "アイケアラボ", store: "アイケアLaBo武蔵小山店" },
       { brand: "アイケアラボ", store: "アイケアLaBo立川店" },
@@ -44,7 +42,6 @@ const SEED_BATCHES: SeedBatch[] = [
   {
     key: "sattou-store-additions-seeded-v2-2026-06",
     installDate: "2026-06-01",
-    joinType: "システムのみ",
     stores: [
       { brand: "アイケアラボ", store: "アイケアLaBo岡山店" },
       { brand: "アイケアラボ", store: "アイケアLaBo日立大甕店" },
@@ -61,26 +58,24 @@ const SEED_BATCHES: SeedBatch[] = [
   },
 ];
 
-const JOIN_TYPES: JoinType[] = [
-  "システム＋マーケ",
-  "システムのみ",
-  "マーケのみ",
-];
-
-const JOIN_TYPE_STYLE: Record<JoinType, string> = {
-  "システム＋マーケ": "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
-  "システムのみ": "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
-  "マーケのみ": "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
-};
-
 type StoreAddition = {
   id: string;
   brand: string;
   store: string;
+  subscriberId: string; // 加入者識別番号 (クライアント既存店舗の追加分を紐付けるため)
   installDate: string; // YYYY-MM-DD
-  joinType: JoinType;
   hpbIntegrated: HPBValue;
   createdAt: string;
+};
+
+// マイグレーション前の旧レコード形式 (joinType が残っている可能性あり)。
+// LocalStorage から読み出す時にだけ登場するので実行時のみ使う。
+type LegacyStoreAddition = Partial<StoreAddition> & {
+  joinType?: string;
+  brand?: string;
+  store?: string;
+  installDate?: string;
+  hpbIntegrated?: HPBValue;
 };
 
 type Props = {
@@ -104,6 +99,20 @@ function yearMonths(year: number): string[] {
   return months;
 }
 
+// 旧レコードから joinType を落として subscriberId を追加する変換。
+// 実行時のガードとしてフィールド有無だけをチェック。
+function normalizeRecord(r: LegacyStoreAddition, i: number): StoreAddition {
+  return {
+    id: (r.id as string) ?? `s-migrated-${i}-${Date.now().toString(36)}`,
+    brand: r.brand ?? "",
+    store: r.store ?? "",
+    subscriberId: r.subscriberId ?? "",
+    installDate: r.installDate ?? "",
+    hpbIntegrated: (r.hpbIntegrated as HPBValue) ?? "なし",
+    createdAt: r.createdAt ?? new Date().toISOString(),
+  };
+}
+
 export default function StoreAdditionsView({ year }: Props) {
   const [regs, setRegs] = useState<StoreAddition[]>([]);
   const [q, setQ] = useState("");
@@ -113,8 +122,8 @@ export default function StoreAdditionsView({ year }: Props) {
 
   const [brand, setBrand] = useState("");
   const [store, setStore] = useState("");
+  const [subscriberId, setSubscriberId] = useState("");
   const [installDate, setInstallDate] = useState("");
-  const [joinType, setJoinType] = useState<JoinType>("システム＋マーケ");
   const [hpb, setHpb] = useState<HPBValue>("なし");
 
   useEffect(() => {
@@ -124,28 +133,18 @@ export default function StoreAdditionsView({ year }: Props) {
       let current: StoreAddition[] = [];
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) current = parsed;
+        if (Array.isArray(parsed)) {
+          current = parsed.map((r, i) => normalizeRecord(r, i));
+        }
       }
 
       let mutated = false;
 
-      // マイグレーション: 過去にシード投入されたアイケアラボの店舗 (システム＋マーケ)
-      // を「システムのみ」に一括変更。1 度だけ実行してフラグを立てる。
-      if (!window.localStorage.getItem(MIGRATION_JOINTYPE_SYSTEMONLY_V1)) {
-        const seededStoreNames = new Set(
-          SEED_BATCHES.flatMap((b) => b.stores.map((s) => s.store)),
-        );
-        current = current.map((r) => {
-          if (
-            seededStoreNames.has(r.store) &&
-            r.joinType !== "システムのみ"
-          ) {
-            mutated = true;
-            return { ...r, joinType: "システムのみ" };
-          }
-          return r;
-        });
-        window.localStorage.setItem(MIGRATION_JOINTYPE_SYSTEMONLY_V1, "1");
+      // 旧スキーマ (joinType 保持) → 新スキーマ (subscriberId) への 1 度きり変換。
+      // normalizeRecord で保存済みでも安全だが、明示的にフラグを立てて記録する。
+      if (!window.localStorage.getItem(MIGRATION_SUBSCRIBER_V1)) {
+        mutated = true; // 保存時に古い joinType が消える
+        window.localStorage.setItem(MIGRATION_SUBSCRIBER_V1, "1");
       }
 
       // 各シードバッチについて「まだ投入されていなければ」その分だけ追記する。
@@ -158,8 +157,8 @@ export default function StoreAdditionsView({ year }: Props) {
           id: newId(),
           brand: d.brand,
           store: d.store,
+          subscriberId: "",
           installDate: batch.installDate,
-          joinType: batch.joinType,
           hpbIntegrated: "なし",
           createdAt: now,
         }));
@@ -189,8 +188,8 @@ export default function StoreAdditionsView({ year }: Props) {
   const resetForm = () => {
     setBrand("");
     setStore("");
+    setSubscriberId("");
     setInstallDate("");
-    setJoinType("システム＋マーケ");
     setHpb("なし");
     setEditingId(null);
     setShowForm(false);
@@ -206,8 +205,8 @@ export default function StoreAdditionsView({ year }: Props) {
   const startEdit = (r: StoreAddition) => {
     setBrand(r.brand);
     setStore(r.store);
+    setSubscriberId(r.subscriberId);
     setInstallDate(r.installDate);
-    setJoinType(r.joinType);
     setHpb(r.hpbIntegrated);
     setEditingId(r.id);
     setShowForm(true);
@@ -224,8 +223,8 @@ export default function StoreAdditionsView({ year }: Props) {
       id: editingId ?? newId(),
       brand: brand.trim(),
       store: s,
+      subscriberId: subscriberId.trim(),
       installDate,
-      joinType,
       hpbIntegrated: hpb,
       createdAt: existing?.createdAt ?? now,
     };
@@ -268,7 +267,7 @@ export default function StoreAdditionsView({ year }: Props) {
           return false;
         if (q) {
           const qq = q.toLowerCase();
-          const hay = `${r.brand} ${r.store}`.toLowerCase();
+          const hay = `${r.brand} ${r.store} ${r.subscriberId}`.toLowerCase();
           if (!hay.includes(qq)) return false;
         }
         return true;
@@ -331,7 +330,7 @@ export default function StoreAdditionsView({ year }: Props) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="ブランド名 / 店舗名で検索"
+              placeholder="ブランド名 / 店舗名 / 識別番号で検索"
               className="input pl-9"
             />
           </div>
@@ -366,18 +365,8 @@ export default function StoreAdditionsView({ year }: Props) {
               </h2>
             </div>
 
+            {/* テーブルの列順に合わせて 導入日 / 識別番号 / ブランド名 / 店舗名 / HPB連携 の順に並べる */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm text-slate-700 block">
-                  店舗名 <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  value={store}
-                  onChange={(e) => setStore(e.target.value)}
-                  placeholder="例: 松島先生（天元）"
-                  className="input"
-                />
-              </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
                   導入日 <span className="text-rose-500">*</span>
@@ -387,6 +376,18 @@ export default function StoreAdditionsView({ year }: Props) {
                   value={installDate}
                   onChange={(e) => setInstallDate(e.target.value)}
                   className="input"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-slate-700 block">
+                  加入者識別番号
+                </label>
+                <input
+                  value={subscriberId}
+                  onChange={(e) => setSubscriberId(e.target.value)}
+                  placeholder="既存クライアントの識別番号 (数字)"
+                  className="input font-mono"
+                  inputMode="numeric"
                 />
               </div>
               <div className="space-y-1">
@@ -402,19 +403,14 @@ export default function StoreAdditionsView({ year }: Props) {
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
-                  入会方法
+                  店舗名 <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={joinType}
-                  onChange={(e) => setJoinType(e.target.value as JoinType)}
-                  className={`input font-medium ${JOIN_TYPE_STYLE[joinType]}`}
-                >
-                  {JOIN_TYPES.map((t) => (
-                    <option key={t} value={t} className="bg-white text-slate-900">
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  value={store}
+                  onChange={(e) => setStore(e.target.value)}
+                  placeholder="例: 松島先生（天元）"
+                  className="input"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
@@ -454,16 +450,16 @@ export default function StoreAdditionsView({ year }: Props) {
           </div>
         )}
 
-        {/* Table */}
+        {/* Table (列順: 導入日 / 識別番号 / ブランド名 / 店舗名 / HPB連携) */}
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left font-medium px-4 py-3">導入日</th>
+                  <th className="text-left font-medium px-4 py-3">識別番号</th>
                   <th className="text-left font-medium px-4 py-3">ブランド名</th>
                   <th className="text-left font-medium px-4 py-3">店舗名</th>
-                  <th className="text-left font-medium px-4 py-3">入会方法</th>
                   <th className="text-left font-medium px-4 py-3">HPB連携</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -486,13 +482,11 @@ export default function StoreAdditionsView({ year }: Props) {
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {r.installDate}
                     </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {r.subscriberId || "—"}
+                    </td>
                     <td className="px-4 py-3">{r.brand || "—"}</td>
                     <td className="px-4 py-3 font-medium">{r.store}</td>
-                    <td className="px-4 py-3">
-                      <span className={`pill ${JOIN_TYPE_STYLE[r.joinType]}`}>
-                        {r.joinType}
-                      </span>
-                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`pill ${
