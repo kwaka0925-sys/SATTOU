@@ -179,8 +179,9 @@ export default function Sidebar() {
   };
 
   return (
-    // SATTOU 本家の紺ベースに合わせたダーク配色。#1a2942 相当の濃紺で本家との統一感を出す。
-    <aside className="w-60 shrink-0 border-r border-[#0f1c34] bg-[#1a2942] min-h-screen flex flex-col text-slate-100">
+    // SATTOU 本家の紺ベースに合わせたダーク配色。#2a3f63 の少し明るめの紺で
+    // 濃すぎず柔らかい印象に。
+    <aside className="w-60 shrink-0 border-r border-[#1a2b47] bg-[#2a3f63] min-h-screen flex flex-col text-slate-100">
       <div className="px-5 py-5 border-b border-white/10">
         <Link href="/" className="flex flex-col gap-1.5">
           {/* ロゴ: 白色 (背景が濃紺なので視認性重視)、"." だけブランドカラーで残す */}
