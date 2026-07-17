@@ -186,13 +186,14 @@ export default function Sidebar() {
     // SATTOU 本家の紺ベースに合わせつつ、少し明るめの青 (#3d5a80) で
     // 圧迫感を減らす配色。
     <aside className="w-60 shrink-0 border-r border-[#2b415f] bg-[#3d5a80] min-h-screen flex flex-col text-slate-100">
-      <div className="px-5 py-5 border-b border-white/10">
+      {/* ロゴブロックだけ白背景 + 青文字。本家 SATTOU. の見え方に近づける。
+          下のナビ部分 (紺背景) との境界がはっきり出るようにする。 */}
+      <div className="px-5 py-5 border-b border-slate-200 bg-white">
         <Link href="/" className="flex flex-col gap-1.5">
-          {/* ロゴ: 白色 (背景が濃紺なので視認性重視)、"." だけブランドカラーで残す */}
-          <div className="font-extrabold text-3xl tracking-tight text-white leading-none">
-            SATTOU<span className="text-brand-400">.</span>
+          <div className="font-extrabold text-3xl tracking-tight text-brand-700 leading-none">
+            SATTOU<span className="text-brand-500">.</span>
           </div>
-          <div className="font-semibold text-sm text-slate-300 leading-tight">
+          <div className="font-semibold text-sm text-brand-800 leading-tight">
             SATTOU管理表
           </div>
         </Link>
