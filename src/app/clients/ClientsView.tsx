@@ -627,7 +627,7 @@ export default function ClientsView({
             className="input w-auto"
           >
             <option value="all">支払方法すべて</option>
-            <option value="振替">振替</option>
+            <option value="振替">口座振替</option>
             <option value="請求書">請求書</option>
           </select>
           <select
@@ -745,7 +745,29 @@ export default function ClientsView({
                       }
                     />
                   </th>
-                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">振替 / 請求書</th>
+                  {/* 列ヘッダーからも直接フィルタリングできるように、ミニ select を並べる。
+                      state は上部フィルタと同じ `pm` を共有する。 */}
+                  <th className="text-left font-medium px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span>振替 / 請求書</span>
+                      <select
+                        value={pm}
+                        onChange={(e) => setPm(e.target.value as PmFilter)}
+                        className={`text-[10px] border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-300 ${
+                          pm === "振替"
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : pm === "請求書"
+                              ? "bg-sky-50 text-sky-700 border-sky-200"
+                              : "bg-white text-slate-600 border-slate-200"
+                        }`}
+                        title="口座振替 / 請求書 で絞り込み"
+                      >
+                        <option value="all">すべて</option>
+                        <option value="振替">口座振替</option>
+                        <option value="請求書">請求書</option>
+                      </select>
+                    </div>
+                  </th>
                   <th className="text-left font-medium px-4 py-3 whitespace-nowrap">
                     加入者識別番号
                     <HeaderCopyButton
