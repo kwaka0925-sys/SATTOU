@@ -27,6 +27,7 @@ type NewRegistration = {
   brand: string;
   store: string;
   representative: string;
+  subscriberId: string; // 加入者識別番号 (システム/マーケいずれでも紐付け用に必要)
   installDate: string; // YYYY-MM-DD
   joinType: JoinType;
   hpbIntegrated: HPBValue;
@@ -65,6 +66,7 @@ export default function NewRegistrationsView({ year }: Props) {
   const [brand, setBrand] = useState("");
   const [store, setStore] = useState("");
   const [representative, setRepresentative] = useState("");
+  const [subscriberId, setSubscriberId] = useState("");
   const [installDate, setInstallDate] = useState("");
   const [joinType, setJoinType] = useState<JoinType>("システム＋マーケ");
   const [hpb, setHpb] = useState<HPBValue>("なし");
@@ -75,10 +77,11 @@ export default function NewRegistrationsView({ year }: Props) {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          // 旧レコードには joinType が存在しないので既定値で補う
+          // 旧レコードには joinType/subscriberId が存在しないので既定値で補う
           const migrated = parsed.map((r: NewRegistration) => ({
             ...r,
             joinType: r.joinType ?? "システム＋マーケ",
+            subscriberId: r.subscriberId ?? "",
           }));
           setRegs(migrated);
         }
@@ -101,6 +104,7 @@ export default function NewRegistrationsView({ year }: Props) {
     setBrand("");
     setStore("");
     setRepresentative("");
+    setSubscriberId("");
     setInstallDate("");
     setJoinType("システム＋マーケ");
     setHpb("なし");
@@ -119,6 +123,7 @@ export default function NewRegistrationsView({ year }: Props) {
     setBrand(r.brand);
     setStore(r.store);
     setRepresentative(r.representative);
+    setSubscriberId(r.subscriberId ?? "");
     setInstallDate(r.installDate);
     setJoinType(r.joinType ?? "システム＋マーケ");
     setHpb(r.hpbIntegrated);
@@ -138,6 +143,7 @@ export default function NewRegistrationsView({ year }: Props) {
       brand: brand.trim(),
       store: s,
       representative: representative.trim(),
+      subscriberId: subscriberId.trim(),
       installDate,
       joinType,
       hpbIntegrated: hpb,
@@ -183,7 +189,7 @@ export default function NewRegistrationsView({ year }: Props) {
         if (hpbFilter !== "all" && r.hpbIntegrated !== hpbFilter) return false;
         if (q) {
           const qq = q.toLowerCase();
-          const hay = `${r.brand} ${r.store} ${r.representative}`.toLowerCase();
+          const hay = `${r.brand} ${r.store} ${r.representative} ${r.subscriberId ?? ""}`.toLowerCase();
           if (!hay.includes(qq)) return false;
         }
         return true;
@@ -248,7 +254,7 @@ export default function NewRegistrationsView({ year }: Props) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="ブランド名 / 店舗名 / 代表者名で検索"
+              placeholder="ブランド名 / 店舗名 / 代表者名 / 識別番号で検索"
               className="input pl-9"
             />
           </div>
@@ -292,7 +298,32 @@ export default function NewRegistrationsView({ year }: Props) {
               </h2>
             </div>
 
+            {/* テーブルの列順に合わせて 導入日 / 識別番号 / ブランド名 / 店舗名 /
+                代表者名 / 入会方法 / HPB連携 の順に並べる */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm text-slate-700 block">
+                  システムの導入日 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={installDate}
+                  onChange={(e) => setInstallDate(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-slate-700 block">
+                  加入者識別番号
+                </label>
+                <input
+                  value={subscriberId}
+                  onChange={(e) => setSubscriberId(e.target.value)}
+                  placeholder="既存クライアントの識別番号 (数字)"
+                  className="input font-mono"
+                  inputMode="numeric"
+                />
+              </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
                   ブランド名
@@ -323,17 +354,6 @@ export default function NewRegistrationsView({ year }: Props) {
                   value={representative}
                   onChange={(e) => setRepresentative(e.target.value)}
                   placeholder="例: 山田 太郎"
-                  className="input"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm text-slate-700 block">
-                  システムの導入日 <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={installDate}
-                  onChange={(e) => setInstallDate(e.target.value)}
                   className="input"
                 />
               </div>
@@ -398,6 +418,7 @@ export default function NewRegistrationsView({ year }: Props) {
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left font-medium px-4 py-3">導入日</th>
+                  <th className="text-left font-medium px-4 py-3">識別番号</th>
                   <th className="text-left font-medium px-4 py-3">ブランド名</th>
                   <th className="text-left font-medium px-4 py-3">店舗名</th>
                   <th className="text-left font-medium px-4 py-3">代表者名</th>
@@ -410,7 +431,7 @@ export default function NewRegistrationsView({ year }: Props) {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       {regs.length === 0
@@ -423,6 +444,9 @@ export default function NewRegistrationsView({ year }: Props) {
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {r.installDate}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {r.subscriberId || "—"}
                     </td>
                     <td className="px-4 py-3">{r.brand || "—"}</td>
                     <td className="px-4 py-3 font-medium">{r.store}</td>
