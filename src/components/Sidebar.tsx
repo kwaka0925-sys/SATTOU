@@ -179,14 +179,15 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-60 shrink-0 border-r border-slate-200 bg-white min-h-screen flex flex-col">
-      <div className="px-5 py-5 border-b border-slate-200">
+    // SATTOU 本家の紺ベースに合わせたダーク配色。#1a2942 相当の濃紺で本家との統一感を出す。
+    <aside className="w-60 shrink-0 border-r border-[#0f1c34] bg-[#1a2942] min-h-screen flex flex-col text-slate-100">
+      <div className="px-5 py-5 border-b border-white/10">
         <Link href="/" className="flex flex-col gap-1.5">
-          {/* ロゴ: サイドバーの横幅 (w-60 = 240px) いっぱいに広げた SATTOU. */}
-          <div className="font-extrabold text-3xl tracking-tight text-slate-900 leading-none">
-            SATTOU<span className="text-brand-600">.</span>
+          {/* ロゴ: 白色 (背景が濃紺なので視認性重視)、"." だけブランドカラーで残す */}
+          <div className="font-extrabold text-3xl tracking-tight text-white leading-none">
+            SATTOU<span className="text-brand-400">.</span>
           </div>
-          <div className="font-semibold text-sm text-slate-700 leading-tight">
+          <div className="font-semibold text-sm text-slate-300 leading-tight">
             SATTOU管理表
           </div>
         </Link>
@@ -202,7 +203,7 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => toggle(section.title)}
-                className="flex items-center justify-between w-full px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+                className="flex items-center justify-between w-full px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white"
               >
                 <span>{section.title}</span>
                 <ChevronDown
@@ -227,11 +228,11 @@ export default function Sidebar() {
                       href={item.href}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors group"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-white/10 transition-colors group"
                     >
                       <Icon className="w-4 h-4 shrink-0" />
                       <span className="flex-1 truncate">{item.label}</span>
-                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-slate-500 shrink-0" />
+                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-slate-200 shrink-0" />
                     </a>
                   );
                 }
@@ -245,8 +246,8 @@ export default function Sidebar() {
                     href={item.href}
                     className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                       active
-                        ? "bg-brand-50 text-brand-700 font-medium"
-                        : "text-slate-600 hover:bg-slate-50"
+                        ? "bg-brand-500/20 text-white font-medium ring-1 ring-brand-400/30"
+                        : "text-slate-200 hover:bg-white/10"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -260,13 +261,13 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="px-4 py-4 border-t border-slate-200 text-xs text-slate-500">
+      <div className="px-4 py-4 border-t border-white/10 text-xs text-slate-400">
         <div className="flex items-center gap-2">
-          <CircleDot className="w-3 h-3 text-emerald-500" />
+          <CircleDot className="w-3 h-3 text-emerald-400" />
           Meta Ads API: 連携中
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <CircleDot className="w-3 h-3 text-emerald-500" />
+          <CircleDot className="w-3 h-3 text-emerald-400" />
           SATTOU API: 連携中
         </div>
       </div>
