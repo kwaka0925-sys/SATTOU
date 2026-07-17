@@ -1,7 +1,5 @@
 // /inquiries とその配下 [month] 詳細ページで共有する型・定数・
-// localStorage アクセスヘルパー。中身の項目定義はまだユーザーから
-// 未指定なので、汎用的な「エントリー = 任意のメモ + 作成時刻」の枠組みだけを
-// 用意している。項目仕様が固まり次第 InquiryEntry を拡張する。
+// localStorage アクセスヘルパー。
 
 export const STORAGE_KEY = "sattou-inquiries";
 
@@ -10,10 +8,20 @@ export const START_YEAR = 2026;
 export const START_MONTH = 5;
 export const MONTHS_COUNT = 12;
 
+// 面談結果。ドロップダウンで選択する 3 択 + 未設定 (空文字)。
+// 月タイルの集計 (契約/断り/検討 の各件数) はこの値でグルーピングする。
+export const RESULT_OPTIONS = ["契約", "断り", "検討"] as const;
+export type InquiryResult = (typeof RESULT_OPTIONS)[number] | "";
+
 export type InquiryEntry = {
   id: string;
-  // 中身の項目仕様が来るまでの汎用フィールド。項目確定後に置き換える。
-  note?: string;
+  meetingDateTime: string; // "YYYY-MM-DDTHH:MM" (datetime-local 用)
+  name: string;
+  phone: string;
+  email: string;
+  content: string; // 問い合わせフォームの本文
+  note: string;
+  result: InquiryResult;
   createdAt: string;
 };
 
@@ -30,6 +38,19 @@ export function ensureMonth(store: Store, key: string): InquiryMonth {
   const existing = store[key];
   if (!existing || !Array.isArray(existing.entries)) return emptyMonth();
   return existing;
+}
+
+// 新規エントリーを作る際の空データ。id と createdAt はコンポーネント側で付与する。
+export function blankEntry(): Omit<InquiryEntry, "id" | "createdAt"> {
+  return {
+    meetingDateTime: "",
+    name: "",
+    phone: "",
+    email: "",
+    content: "",
+    note: "",
+    result: "",
+  };
 }
 
 export function monthKey(year: number, month: number): string {
@@ -67,8 +88,39 @@ export function displayMonths(): Array<{
   return arr;
 }
 
-// URL の月キー "YYYY-MM" が上の displayMonths の範囲内かを判定。
-// 詳細ページで範囲外を弾く用途。
 export function isDisplayMonth(key: string): boolean {
   return displayMonths().some((m) => m.key === key);
+}
+
+// 月あたりの集計。タイル画面と詳細画面のサマリー両方で使う。
+export type MonthStats = {
+  total: number;
+  contracted: number; // 契約
+  declined: number; // 断り
+  considering: number; // 検討
+};
+
+export function computeMonthStats(md: InquiryMonth): MonthStats {
+  let contracted = 0;
+  let declined = 0;
+  let considering = 0;
+  for (const e of md.entries) {
+    if (e.result === "契約") contracted++;
+    else if (e.result === "断り") declined++;
+    else if (e.result === "検討") considering++;
+  }
+  return {
+    total: md.entries.length,
+    contracted,
+    declined,
+    considering,
+  };
+}
+
+// 面談結果のバッジ色。契約=緑 / 断り=赤 / 検討=琥珀 / 未設定=灰。
+export function resultPillClass(v: InquiryResult): string {
+  if (v === "契約") return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
+  if (v === "断り") return "bg-rose-100 text-rose-800 ring-1 ring-rose-200";
+  if (v === "検討") return "bg-amber-100 text-amber-800 ring-1 ring-amber-200";
+  return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
 }
