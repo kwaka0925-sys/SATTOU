@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   FileText,
@@ -9,6 +10,7 @@ import {
   CircleDot,
   BarChart3,
   Building2,
+  ChevronDown,
   UserX,
   UserPlus,
   FileSignature,
@@ -35,7 +37,16 @@ type NavItem = {
 type NavSection = {
   title: string;
   items: NavItem[];
+  // collapsible=true にすると見出しをクリックで開閉できるアコーディオンになる。
+  // defaultCollapsed=true で初回は閉じた状態で開始 (ユーザーの操作で開閉すると
+  // その状態が localStorage に記録され次回以降も維持される)。
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 };
+
+// アコーディオンの開閉状態を保存する localStorage キー。
+// { [section.title]: boolean } の形。true = 閉じている / false = 開いている。
+const SIDEBAR_COLLAPSED_KEY = "sattou-sidebar-collapsed";
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -115,6 +126,8 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "システム",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       { href: "/login-manager", label: "ログイン管理", icon: KeyRound },
       { href: "/admin-sheets", label: "管理系シート", icon: FileSpreadsheet },
@@ -125,6 +138,46 @@ const NAV_SECTIONS: NavSection[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  // 折りたたみ状態: true = 閉じている / undefined | false = 開いている。
+  // 初期値は defaultCollapsed を採用、以後はユーザー操作が localStorage に上書き保存される。
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          setCollapsed(parsed);
+          return;
+        }
+      }
+      // 初回訪問: defaultCollapsed=true のセクションだけ閉じておく。
+      const initial: Record<string, boolean> = {};
+      NAV_SECTIONS.forEach((s) => {
+        if (s.collapsible && s.defaultCollapsed) initial[s.title] = true;
+      });
+      setCollapsed(initial);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggle = (title: string) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [title]: !prev[title] };
+      try {
+        window.localStorage.setItem(
+          SIDEBAR_COLLAPSED_KEY,
+          JSON.stringify(next),
+        );
+      } catch {
+        // ignore quota
+      }
+      return next;
+    });
+  };
+
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white min-h-screen flex flex-col">
       <div className="px-5 py-5 border-b border-slate-200">
@@ -139,11 +192,31 @@ export default function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-4">
-        {NAV_SECTIONS.map((section) => (
+        {NAV_SECTIONS.map((section) => {
+          const isCollapsed = section.collapsible && collapsed[section.title];
+          return (
           <div key={section.title}>
-            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {section.title}
-            </div>
+            {section.collapsible ? (
+              // 折りたたみ可能セクションの見出しはボタン化。クリックで開閉、
+              // 開閉状態は右端のシェブロンで示す。
+              <button
+                type="button"
+                onClick={() => toggle(section.title)}
+                className="flex items-center justify-between w-full px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+              >
+                <span>{section.title}</span>
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform ${
+                    isCollapsed ? "-rotate-90" : ""
+                  }`}
+                />
+              </button>
+            ) : (
+              <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {section.title}
+              </div>
+            )}
+            {!isCollapsed && (
             <div className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
@@ -182,8 +255,10 @@ export default function Sidebar() {
                 );
               })}
             </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </nav>
       <div className="px-4 py-4 border-t border-slate-200 text-xs text-slate-500">
         <div className="flex items-center gap-2">
