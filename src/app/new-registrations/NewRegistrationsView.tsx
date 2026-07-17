@@ -36,6 +36,10 @@ type NewRegistration = {
 
 type Props = {
   year: number;
+  // 加入者識別番号 → サロン名(=ブランド名) の対応辞書。
+  // 請求書シートの直近数ヶ月から集めたもの。識別番号を入力した時点で
+  // ブランド名フィールドを自動反映する。
+  brandLookup: Record<string, string>;
 };
 
 function monthLabel(month: string): string {
@@ -55,7 +59,7 @@ function yearMonths(year: number): string[] {
   return months;
 }
 
-export default function NewRegistrationsView({ year }: Props) {
+export default function NewRegistrationsView({ year, brandLookup }: Props) {
   const [regs, setRegs] = useState<NewRegistration[]>([]);
   const [q, setQ] = useState("");
   const [monthFilter, setMonthFilter] = useState<string>("all");
@@ -318,7 +322,14 @@ export default function NewRegistrationsView({ year }: Props) {
                 </label>
                 <input
                   value={subscriberId}
-                  onChange={(e) => setSubscriberId(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSubscriberId(v);
+                    // 請求書シートに一致する識別番号があればブランド名を自動反映。
+                    // 見つからない場合はユーザーの手入力を尊重して触らない。
+                    const found = brandLookup[v.trim()];
+                    if (found) setBrand(found);
+                  }}
                   placeholder="既存クライアントの識別番号 (数字)"
                   className="input font-mono"
                   inputMode="numeric"

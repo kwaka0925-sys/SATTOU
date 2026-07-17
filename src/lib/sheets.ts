@@ -455,6 +455,47 @@ export async function fetchDashboardTotals(
   }
 }
 
+// Build a subscriberId → salonName lookup by scanning the most recent N
+// billing months. The most recent month's mapping wins in case of drift.
+// Used by /store-additions and /new-registrations to auto-fill the brand
+// name field when the operator types an existing subscriber id.
+export async function fetchSubscriberBrandMap(
+  monthsToScan: number = 6,
+): Promise<Record<string, string>> {
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return {};
+
+  const months: string[] = [];
+  const d = new Date();
+  // Start from the current billing month (今月+1) and walk backwards.
+  d.setMonth(d.getMonth() + 1);
+  for (let i = 0; i < monthsToScan; i++) {
+    months.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    );
+    d.setMonth(d.getMonth() - 1);
+  }
+
+  const results = await Promise.all(
+    months.map((m) => fetchInvoicesForMonthStrict(m)),
+  );
+
+  const map: Record<string, string> = {};
+  // months is newest-first; iterate in that order and keep the first hit so
+  // the newest sheet wins.
+  results.forEach((rows) => {
+    rows.forEach((r) => {
+      const sid = (r.subscriberId ?? "").trim();
+      if (!sid) return;
+      if (map[sid]) return;
+      const name = (r.clientName ?? "").trim();
+      if (!name) return;
+      map[sid] = name;
+    });
+  });
+  return map;
+}
+
 export type StoreSheetRow = {
   order: number;
   identifier: string;

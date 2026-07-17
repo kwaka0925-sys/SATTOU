@@ -80,6 +80,10 @@ type LegacyStoreAddition = Partial<StoreAddition> & {
 
 type Props = {
   year: number;
+  // 加入者識別番号 → サロン名(=ブランド名) の対応辞書。
+  // /store-additions は請求書シートの直近数ヶ月からこの辞書を受け取り、
+  // フォームで識別番号を入力した時にブランド名を自動反映する。
+  brandLookup: Record<string, string>;
 };
 
 function monthLabel(month: string): string {
@@ -113,7 +117,7 @@ function normalizeRecord(r: LegacyStoreAddition, i: number): StoreAddition {
   };
 }
 
-export default function StoreAdditionsView({ year }: Props) {
+export default function StoreAdditionsView({ year, brandLookup }: Props) {
   const [regs, setRegs] = useState<StoreAddition[]>([]);
   const [q, setQ] = useState("");
   const [monthFilter, setMonthFilter] = useState<string>("all");
@@ -384,7 +388,15 @@ export default function StoreAdditionsView({ year }: Props) {
                 </label>
                 <input
                   value={subscriberId}
-                  onChange={(e) => setSubscriberId(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSubscriberId(v);
+                    // 請求書シート上に一致する識別番号があれば
+                    // その行のサロン名をブランド名に自動反映する。
+                    // 見つからない場合はユーザーの手入力を優先して触らない。
+                    const found = brandLookup[v.trim()];
+                    if (found) setBrand(found);
+                  }}
                   placeholder="既存クライアントの識別番号 (数字)"
                   className="input font-mono"
                   inputMode="numeric"
