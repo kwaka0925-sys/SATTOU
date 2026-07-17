@@ -79,6 +79,8 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "請求",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       { href: "/clients", label: "請求書一覧", icon: FileText },
       {
@@ -106,6 +108,8 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "新規",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       { href: "/new-registrations", label: "新規登録", icon: UserPlus },
       { href: "/store-additions", label: "店舗追加", icon: Store },
@@ -179,9 +183,9 @@ export default function Sidebar() {
   };
 
   return (
-    // SATTOU 本家の紺ベースに合わせたダーク配色。#2a3f63 の少し明るめの紺で
-    // 濃すぎず柔らかい印象に。
-    <aside className="w-60 shrink-0 border-r border-[#1a2b47] bg-[#2a3f63] min-h-screen flex flex-col text-slate-100">
+    // SATTOU 本家の紺ベースに合わせつつ、少し明るめの青 (#3d5a80) で
+    // 圧迫感を減らす配色。
+    <aside className="w-60 shrink-0 border-r border-[#2b415f] bg-[#3d5a80] min-h-screen flex flex-col text-slate-100">
       <div className="px-5 py-5 border-b border-white/10">
         <Link href="/" className="flex flex-col gap-1.5">
           {/* ロゴ: 白色 (背景が濃紺なので視認性重視)、"." だけブランドカラーで残す */}
