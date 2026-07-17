@@ -22,9 +22,6 @@ type HpbAddition = {
 
 type Props = {
   year: number;
-  // 請求書シートから引いてきたクライアント (店舗) 名の重複除去済みリスト。
-  // 店舗名側のオートコンプリート候補として使う。
-  salonNames?: string[];
 };
 
 function monthLabel(month: string): string {
@@ -60,7 +57,7 @@ function collectBrandsFrom(key: string): string[] {
   }
 }
 
-export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
+export default function HpbAdditionsView({ year }: Props) {
   const [regs, setRegs] = useState<HpbAddition[]>([]);
   const [brandCandidates, setBrandCandidates] = useState<string[]>([]);
   const [q, setQ] = useState("");
@@ -77,20 +74,6 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
   const [brandHighlight, setBrandHighlight] = useState(0);
   const brandWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // 店舗名オートコンプリート (請求書シートからの候補)
-  const [storeOpen, setStoreOpen] = useState(false);
-  const [storeHighlight, setStoreHighlight] = useState(0);
-  const storeWrapRef = useRef<HTMLDivElement | null>(null);
-
-  // 店舗名オートコンプリート候補: 空入力時は全件 (上限 30)、
-  // それ以外は部分一致。
-  const storeSuggestions = useMemo(() => {
-    const qq = store.trim().toLowerCase();
-    const all = salonNames;
-    if (!qq) return all.slice(0, 30);
-    return all.filter((n) => n.toLowerCase().includes(qq)).slice(0, 30);
-  }, [salonNames, store]);
-
   // ブランド名候補: 過去 HPB エントリ + 店舗追加 + 新規登録 のブランド名を
   // 重複除去してあいうえお順にソート。
   const brandSuggestions = useMemo(() => {
@@ -100,7 +83,7 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
     return all.filter((n) => n.toLowerCase().includes(qq)).slice(0, 30);
   }, [brandCandidates, brand]);
 
-  // ポップオーバー外クリックで閉じる。ブランド用と店舗用でそれぞれ登録。
+  // ポップオーバー外クリックで閉じる。
   useEffect(() => {
     if (!brandOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -112,18 +95,6 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [brandOpen]);
-
-  useEffect(() => {
-    if (!storeOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!storeWrapRef.current) return;
-      if (!storeWrapRef.current.contains(e.target as Node)) {
-        setStoreOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [storeOpen]);
 
   useEffect(() => {
     try {
@@ -187,7 +158,7 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
   };
 
   const save = () => {
-    // 店舗名は任意入力に変更。導入日だけ必須のガード。
+    // 店舗名は任意入力。導入日だけ必須のガード。
     if (!installDate) return;
     const now = new Date().toISOString();
     const existing = editingId
@@ -436,88 +407,19 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
                 />
               </div>
 
-              {/* 店舗名 (後) — 任意入力に変更 (* 表示なし、空でも保存可能) */}
+              {/* 店舗名 (後) — 任意入力の自由テキスト。オートコンプリートは付けない */}
               <div className="space-y-1 md:col-span-2">
                 <label className="text-sm text-slate-700 block">
                   店舗名
                   <span className="text-[11px] text-slate-400 ml-2">(任意)</span>
-                  {salonNames.length > 0 && (
-                    <span className="text-[11px] text-slate-400 ml-2">
-                      · シートから {salonNames.length} 件
-                    </span>
-                  )}
                 </label>
-                <div className="relative" ref={storeWrapRef}>
-                  <input
-                    value={store}
-                    onChange={(e) => {
-                      setStore(e.target.value);
-                      setStoreOpen(true);
-                      setStoreHighlight(0);
-                    }}
-                    onFocus={() => setStoreOpen(true)}
-                    onKeyDown={(e) => {
-                      if (!storeOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
-                        setStoreOpen(true);
-                        return;
-                      }
-                      if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setStoreHighlight((h) =>
-                          Math.min(h + 1, storeSuggestions.length - 1),
-                        );
-                      } else if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        setStoreHighlight((h) => Math.max(h - 1, 0));
-                      } else if (e.key === "Enter") {
-                        if (storeSuggestions[storeHighlight]) {
-                          e.preventDefault();
-                          setStore(storeSuggestions[storeHighlight]);
-                          setStoreOpen(false);
-                        }
-                      } else if (e.key === "Escape") {
-                        setStoreOpen(false);
-                      }
-                    }}
-                    placeholder={
-                      salonNames.length > 0
-                        ? "クリック or 入力して検索 (例: 松島)"
-                        : "例: 松島先生（天元）"
-                    }
-                    className="input pr-8"
-                    autoComplete="off"
-                  />
-                  <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  {storeOpen && storeSuggestions.length > 0 && (
-                    <ul className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg text-sm">
-                      {storeSuggestions.map((name, i) => (
-                        <li
-                          key={name}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setStore(name);
-                            setStoreOpen(false);
-                          }}
-                          onMouseEnter={() => setStoreHighlight(i)}
-                          className={`px-3 py-2 cursor-pointer ${
-                            i === storeHighlight
-                              ? "bg-brand-50 text-brand-800"
-                              : "hover:bg-slate-50"
-                          }`}
-                        >
-                          {name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {storeOpen &&
-                    storeSuggestions.length === 0 &&
-                    salonNames.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-md border border-slate-200 bg-white shadow-lg text-xs text-slate-500 px-3 py-2">
-                        該当する店舗が見つかりません。このまま入力すれば自由入力で保存できます。
-                      </div>
-                    )}
-                </div>
+                <input
+                  value={store}
+                  onChange={(e) => setStore(e.target.value)}
+                  placeholder="例: 松島先生（天元）"
+                  className="input"
+                  autoComplete="off"
+                />
               </div>
             </div>
 
