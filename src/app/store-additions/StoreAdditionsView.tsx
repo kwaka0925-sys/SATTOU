@@ -6,6 +6,13 @@ import { Plus, Search, Store as StoreIcon, Trash2 } from "lucide-react";
 import { num } from "@/lib/format";
 
 const STORAGE_KEY = "sattou-store-additions";
+// 既にシード済みの店舗の joinType を「システムのみ」に一括変更するマイグレーション。
+// 1 度だけ実行する (フラグを立てて再実行させない)。
+const MIGRATION_JOINTYPE_SYSTEMONLY_V1 =
+  "sattou-store-additions-migration-jointype-systemonly-v1";
+
+type HPBValue = "あり" | "なし";
+type JoinType = "システム＋マーケ" | "システムのみ" | "マーケのみ";
 
 // スプレッドシートから受け取ったアイケアラボの月別店舗追加分。
 // バッチごとに独立の「投入済み」フラグを持つ。既に他バッチをシード済みでも、
@@ -14,6 +21,7 @@ const STORAGE_KEY = "sattou-store-additions";
 type SeedBatch = {
   key: string; // 投入済みフラグの localStorage キー
   installDate: string;
+  joinType: JoinType;
   stores: Array<{ brand: string; store: string }>;
 };
 
@@ -21,6 +29,7 @@ const SEED_BATCHES: SeedBatch[] = [
   {
     key: "sattou-store-additions-seeded-v1",
     installDate: "2026-05-01",
+    joinType: "システムのみ",
     stores: [
       { brand: "アイケアラボ", store: "アイケアLaBo武蔵小山店" },
       { brand: "アイケアラボ", store: "アイケアLaBo立川店" },
@@ -35,6 +44,7 @@ const SEED_BATCHES: SeedBatch[] = [
   {
     key: "sattou-store-additions-seeded-v2-2026-06",
     installDate: "2026-06-01",
+    joinType: "システムのみ",
     stores: [
       { brand: "アイケアラボ", store: "アイケアLaBo岡山店" },
       { brand: "アイケアラボ", store: "アイケアLaBo日立大甕店" },
@@ -50,9 +60,6 @@ const SEED_BATCHES: SeedBatch[] = [
     ],
   },
 ];
-
-type HPBValue = "あり" | "なし";
-type JoinType = "システム＋マーケ" | "システムのみ" | "マーケのみ";
 
 const JOIN_TYPES: JoinType[] = [
   "システム＋マーケ",
@@ -120,11 +127,31 @@ export default function StoreAdditionsView({ year }: Props) {
         if (Array.isArray(parsed)) current = parsed;
       }
 
+      let mutated = false;
+
+      // マイグレーション: 過去にシード投入されたアイケアラボの店舗 (システム＋マーケ)
+      // を「システムのみ」に一括変更。1 度だけ実行してフラグを立てる。
+      if (!window.localStorage.getItem(MIGRATION_JOINTYPE_SYSTEMONLY_V1)) {
+        const seededStoreNames = new Set(
+          SEED_BATCHES.flatMap((b) => b.stores.map((s) => s.store)),
+        );
+        current = current.map((r) => {
+          if (
+            seededStoreNames.has(r.store) &&
+            r.joinType !== "システムのみ"
+          ) {
+            mutated = true;
+            return { ...r, joinType: "システムのみ" };
+          }
+          return r;
+        });
+        window.localStorage.setItem(MIGRATION_JOINTYPE_SYSTEMONLY_V1, "1");
+      }
+
       // 各シードバッチについて「まだ投入されていなければ」その分だけ追記する。
       // これで v1 (5月分) を投入済みのユーザーも v2 (6月分) を追加受領できる。
       // 各バッチのフラグは独立なので、削除後の再投入も起きない。
       const now = new Date().toISOString();
-      let mutated = false;
       for (const batch of SEED_BATCHES) {
         if (window.localStorage.getItem(batch.key)) continue;
         const additions: StoreAddition[] = batch.stores.map((d) => ({
@@ -132,7 +159,7 @@ export default function StoreAdditionsView({ year }: Props) {
           brand: d.brand,
           store: d.store,
           installDate: batch.installDate,
-          joinType: "システム＋マーケ",
+          joinType: batch.joinType,
           hpbIntegrated: "なし",
           createdAt: now,
         }));
