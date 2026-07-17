@@ -20,6 +20,7 @@ import {
   ExternalLink,
   ArrowRightLeft,
   Users,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -104,6 +105,12 @@ const NAV_SECTIONS: NavSection[] = [
     title: "解約",
     items: [
       { href: "/cancellations", label: "解約一覧", icon: UserX },
+    ],
+  },
+  {
+    title: "問い合わせ",
+    items: [
+      { href: "/inquiries", label: "新規問い合わせ", icon: MessageSquare },
     ],
   },
   {
