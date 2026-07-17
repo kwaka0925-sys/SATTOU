@@ -6,6 +6,11 @@ import { ChevronDown, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { num } from "@/lib/format";
 
 const STORAGE_KEY = "sattou-hpb-additions";
+// ブランド名候補を集める他ページの localStorage キー。
+// これらに保存されている過去のブランド名を集約して、
+// HPB 連携追加時のドロップダウン候補にする。
+const STORE_ADDITIONS_KEY = "sattou-store-additions";
+const NEW_REGISTRATIONS_KEY = "sattou-new-registrations";
 
 type HpbAddition = {
   id: string;
@@ -18,7 +23,7 @@ type HpbAddition = {
 type Props = {
   year: number;
   // 請求書シートから引いてきたクライアント (店舗) 名の重複除去済みリスト。
-  // 入力欄でオートコンプリート候補として使う。
+  // 店舗名側のオートコンプリート候補として使う。
   salonNames?: string[];
 };
 
@@ -39,8 +44,25 @@ function yearMonths(year: number): string[] {
   return months;
 }
 
+// 指定 localStorage キーからブランド名を集める。存在しないキーや不正データは無視。
+function collectBrandsFrom(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((r: { brand?: string }) => (r?.brand ?? "").trim())
+      .filter((s: string) => s.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
   const [regs, setRegs] = useState<HpbAddition[]>([]);
+  const [brandCandidates, setBrandCandidates] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [showForm, setShowForm] = useState(false);
@@ -49,24 +71,48 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
   const [brand, setBrand] = useState("");
   const [store, setStore] = useState("");
   const [installDate, setInstallDate] = useState("");
-  // 店舗名オートコンプリートのポップオーバー表示状態と、キーボード操作用の
-  // ハイライト行インデックス。
+
+  // ブランド名ドロップダウン (店舗追加/新規登録/HPB追加の過去エントリから集約)
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [brandHighlight, setBrandHighlight] = useState(0);
+  const brandWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // 店舗名オートコンプリート (請求書シートからの候補)
   const [storeOpen, setStoreOpen] = useState(false);
   const [storeHighlight, setStoreHighlight] = useState(0);
   const storeWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // 入力に応じて絞り込んだ候補。空入力時は全件 (上限 30 で切り捨てて描画コストを抑える)。
-  // 部分一致で検索。ひらがな/カタカナは変換していないが、店舗名は漢字混じりが
-  // 大半なので実運用には十分。
+  // 店舗名オートコンプリート候補: 空入力時は全件 (上限 30)、
+  // それ以外は部分一致。
   const storeSuggestions = useMemo(() => {
-    const q = store.trim().toLowerCase();
+    const qq = store.trim().toLowerCase();
     const all = salonNames;
-    if (!q) return all.slice(0, 30);
-    return all.filter((n) => n.toLowerCase().includes(q)).slice(0, 30);
+    if (!qq) return all.slice(0, 30);
+    return all.filter((n) => n.toLowerCase().includes(qq)).slice(0, 30);
   }, [salonNames, store]);
 
-  // ポップオーバー外をクリックしたら閉じる。フォーム全体はモーダルではないので
-  // ドキュメント全体で mousedown を拾って自前で判定する。
+  // ブランド名候補: 過去 HPB エントリ + 店舗追加 + 新規登録 のブランド名を
+  // 重複除去してあいうえお順にソート。
+  const brandSuggestions = useMemo(() => {
+    const qq = brand.trim().toLowerCase();
+    const all = brandCandidates;
+    if (!qq) return all.slice(0, 30);
+    return all.filter((n) => n.toLowerCase().includes(qq)).slice(0, 30);
+  }, [brandCandidates, brand]);
+
+  // ポップオーバー外クリックで閉じる。ブランド用と店舗用でそれぞれ登録。
+  useEffect(() => {
+    if (!brandOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!brandWrapRef.current) return;
+      if (!brandWrapRef.current.contains(e.target as Node)) {
+        setBrandOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [brandOpen]);
+
   useEffect(() => {
     if (!storeOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -89,6 +135,14 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
     } catch {
       // ignore
     }
+    // 他ページも含めてブランド名候補を集める。
+    const fromHpb = collectBrandsFrom(STORAGE_KEY);
+    const fromStores = collectBrandsFrom(STORE_ADDITIONS_KEY);
+    const fromNew = collectBrandsFrom(NEW_REGISTRATIONS_KEY);
+    const unique = Array.from(
+      new Set([...fromHpb, ...fromStores, ...fromNew]),
+    ).sort((a, b) => a.localeCompare(b, "ja"));
+    setBrandCandidates(unique);
   }, []);
 
   const persist = (next: HpbAddition[]) => {
@@ -98,6 +152,15 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
     } catch {
       // ignore quota errors
     }
+    // 保存後にブランド候補も更新 (新規ブランド名が入った可能性)
+    const newBrand = next
+      .map((r) => r.brand.trim())
+      .filter((s) => s.length > 0);
+    setBrandCandidates((prev) =>
+      Array.from(new Set([...prev, ...newBrand])).sort((a, b) =>
+        a.localeCompare(b, "ja"),
+      ),
+    );
   };
 
   const resetForm = () => {
@@ -124,8 +187,8 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
   };
 
   const save = () => {
-    const s = store.trim();
-    if (!s || !installDate) return;
+    // 店舗名は任意入力に変更。導入日だけ必須のガード。
+    if (!installDate) return;
     const now = new Date().toISOString();
     const existing = editingId
       ? regs.find((r) => r.id === editingId)
@@ -133,7 +196,7 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
     const record: HpbAddition = {
       id: editingId ?? newId(),
       brand: brand.trim(),
-      store: s,
+      store: store.trim(),
       installDate,
       createdAt: existing?.createdAt ?? now,
     };
@@ -277,12 +340,110 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ブランド名 (先) — 店舗追加/新規登録/HPB追加の履歴から候補を出す */}
               <div className="space-y-1">
                 <label className="text-sm text-slate-700 block">
-                  店舗名 <span className="text-rose-500">*</span>
+                  ブランド名
+                  {brandCandidates.length > 0 && (
+                    <span className="text-[11px] text-slate-400 ml-2">
+                      (過去に使用 {brandCandidates.length} 件)
+                    </span>
+                  )}
+                </label>
+                <div className="relative" ref={brandWrapRef}>
+                  <input
+                    value={brand}
+                    onChange={(e) => {
+                      setBrand(e.target.value);
+                      setBrandOpen(true);
+                      setBrandHighlight(0);
+                    }}
+                    onFocus={() => setBrandOpen(true)}
+                    onKeyDown={(e) => {
+                      if (!brandOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+                        setBrandOpen(true);
+                        return;
+                      }
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setBrandHighlight((h) =>
+                          Math.min(h + 1, brandSuggestions.length - 1),
+                        );
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setBrandHighlight((h) => Math.max(h - 1, 0));
+                      } else if (e.key === "Enter") {
+                        if (brandSuggestions[brandHighlight]) {
+                          e.preventDefault();
+                          setBrand(brandSuggestions[brandHighlight]);
+                          setBrandOpen(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        setBrandOpen(false);
+                      }
+                    }}
+                    placeholder={
+                      brandCandidates.length > 0
+                        ? "クリック or 入力して選択 (例: アイケアラボ)"
+                        : "例: モアリジャパン"
+                    }
+                    className="input pr-8"
+                    autoComplete="off"
+                  />
+                  <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  {brandOpen && brandSuggestions.length > 0 && (
+                    <ul className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg text-sm">
+                      {brandSuggestions.map((name, i) => (
+                        <li
+                          key={name}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setBrand(name);
+                            setBrandOpen(false);
+                          }}
+                          onMouseEnter={() => setBrandHighlight(i)}
+                          className={`px-3 py-2 cursor-pointer ${
+                            i === brandHighlight
+                              ? "bg-brand-50 text-brand-800"
+                              : "hover:bg-slate-50"
+                          }`}
+                        >
+                          {name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {brandOpen &&
+                    brandSuggestions.length === 0 &&
+                    brandCandidates.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-md border border-slate-200 bg-white shadow-lg text-xs text-slate-500 px-3 py-2">
+                        該当するブランドが見つかりません。このまま入力すれば自由入力で保存できます。
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              {/* 導入日 */}
+              <div className="space-y-1">
+                <label className="text-sm text-slate-700 block">
+                  導入日 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={installDate}
+                  onChange={(e) => setInstallDate(e.target.value)}
+                  className="input"
+                />
+              </div>
+
+              {/* 店舗名 (後) — 任意入力に変更 (* 表示なし、空でも保存可能) */}
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-sm text-slate-700 block">
+                  店舗名
+                  <span className="text-[11px] text-slate-400 ml-2">(任意)</span>
                   {salonNames.length > 0 && (
                     <span className="text-[11px] text-slate-400 ml-2">
-                      (シートから {salonNames.length} 件)
+                      · シートから {salonNames.length} 件
                     </span>
                   )}
                 </label>
@@ -328,9 +489,7 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
                   />
                   <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   {storeOpen && storeSuggestions.length > 0 && (
-                    <ul
-                      className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg text-sm"
-                    >
+                    <ul className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg text-sm">
                       {storeSuggestions.map((name, i) => (
                         <li
                           key={name}
@@ -360,28 +519,6 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
                     )}
                 </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm text-slate-700 block">
-                  導入日 <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={installDate}
-                  onChange={(e) => setInstallDate(e.target.value)}
-                  className="input"
-                />
-              </div>
-              <div className="space-y-1 md:col-span-2">
-                <label className="text-sm text-slate-700 block">
-                  ブランド名
-                </label>
-                <input
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="例: モアリジャパン"
-                  className="input"
-                />
-              </div>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -390,7 +527,7 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
               </button>
               <button
                 onClick={save}
-                disabled={!store.trim() || !installDate}
+                disabled={!installDate}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingId ? "更新" : "保存"}
@@ -429,8 +566,8 @@ export default function HpbAdditionsView({ year, salonNames = [] }: Props) {
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {r.installDate}
                     </td>
-                    <td className="px-4 py-3">{r.brand || "—"}</td>
-                    <td className="px-4 py-3 font-medium">{r.store}</td>
+                    <td className="px-4 py-3 font-medium">{r.brand || "—"}</td>
+                    <td className="px-4 py-3">{r.store || "—"}</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button
                         onClick={() => startEdit(r)}
