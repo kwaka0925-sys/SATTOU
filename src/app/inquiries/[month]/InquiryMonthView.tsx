@@ -9,6 +9,7 @@ import {
   STORAGE_KEY,
   RESULT_OPTIONS,
   CONTRACT_PLAN_OPTIONS,
+  STORE_COUNT_OPTIONS,
   blankEntry,
   computeMonthStats,
   contractPlanPillClass,
@@ -19,6 +20,7 @@ import {
   type ContractPlan,
   type InquiryEntry,
   type InquiryResult,
+  type StoreCount,
   type Store,
 } from "../lib";
 
@@ -166,10 +168,10 @@ export default function InquiryMonthView({ year, month }: Props) {
                   <th className="text-left font-medium px-3 py-2 min-w-[180px]">
                     面談日時
                   </th>
-                  <th className="text-left font-medium px-3 py-2 min-w-[140px]">
+                  <th className="text-left font-medium px-3 py-2 min-w-[110px]">
                     お名前
                   </th>
-                  <th className="text-left font-medium px-3 py-2 min-w-[140px]">
+                  <th className="text-left font-medium px-3 py-2 min-w-[110px]">
                     電話番号
                   </th>
                   <th className="text-left font-medium px-3 py-2 min-w-[200px]">
@@ -178,7 +180,7 @@ export default function InquiryMonthView({ year, month }: Props) {
                   <th className="text-left font-medium px-3 py-2 min-w-[240px]">
                     問い合わせ内容
                   </th>
-                  <th className="text-left font-medium px-3 py-2 min-w-[200px]">
+                  <th className="text-left font-medium px-3 py-2 min-w-[280px]">
                     メモ
                   </th>
                   <th className="text-left font-medium px-3 py-2 min-w-[130px]">
@@ -187,6 +189,9 @@ export default function InquiryMonthView({ year, month }: Props) {
                   <th className="text-left font-medium px-3 py-2 min-w-[160px]">
                     契約プラン
                   </th>
+                  <th className="text-left font-medium px-3 py-2 min-w-[120px]">
+                    店舗数
+                  </th>
                   <th className="text-left font-medium px-3 py-2 w-[60px]"></th>
                 </tr>
               </thead>
@@ -194,7 +199,7 @@ export default function InquiryMonthView({ year, month }: Props) {
                 {md.entries.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       まだ問い合わせがありません。「問い合わせを追加」から入力を始めてください。
@@ -275,11 +280,14 @@ export default function InquiryMonthView({ year, month }: Props) {
                         value={e.result}
                         onChange={(ev) => {
                           const next = ev.target.value as InquiryResult;
-                          // 契約以外に切り替えた時は契約プランを自動で消す。
-                          // 契約プラン欄が使えるのは面談結果 = 契約 の時だけ、という
+                          // 契約以外に切り替えた時は契約プランと店舗数を自動で消す。
+                          // これらの欄が使えるのは面談結果 = 契約 の時だけ、という
                           // ルールを保存側でも維持する。
                           const patch: Partial<InquiryEntry> = { result: next };
-                          if (next !== "契約") patch.contractPlan = "";
+                          if (next !== "契約") {
+                            patch.contractPlan = "";
+                            patch.storeCount = 0;
+                          }
                           updateEntry(e.id, patch);
                         }}
                         className={`input text-sm w-full font-medium ${resultPillClass(e.result)}`}
@@ -323,6 +331,41 @@ export default function InquiryMonthView({ year, month }: Props) {
                               className="bg-white text-slate-900"
                             >
                               {p}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {/* 店舗数も契約プラン同様、面談結果 = 契約 の時だけ選択可。
+                          値は 0 (未選択) or 1〜10。select は文字列でしか値を扱えないので
+                          onChange で parseInt して StoreCount 型に戻す。 */}
+                      {e.result === "契約" ? (
+                        <select
+                          value={String(e.storeCount ?? 0)}
+                          onChange={(ev) => {
+                            const n = parseInt(ev.target.value, 10);
+                            const val = (Number.isFinite(n) ? n : 0) as StoreCount;
+                            updateEntry(e.id, { storeCount: val });
+                          }}
+                          className={`input text-sm w-full font-medium ${
+                            (e.storeCount ?? 0) > 0
+                              ? "bg-teal-100 text-teal-800 ring-1 ring-teal-200"
+                              : "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                          }`}
+                        >
+                          <option value="0" className="bg-white text-slate-900">
+                            未選択
+                          </option>
+                          {STORE_COUNT_OPTIONS.map((n) => (
+                            <option
+                              key={n}
+                              value={String(n)}
+                              className="bg-white text-slate-900"
+                            >
+                              {n}店舗
                             </option>
                           ))}
                         </select>

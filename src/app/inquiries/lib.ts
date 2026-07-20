@@ -22,6 +22,11 @@ export const CONTRACT_PLAN_OPTIONS = [
 ] as const;
 export type ContractPlan = (typeof CONTRACT_PLAN_OPTIONS)[number] | "";
 
+// 契約時の店舗数 (1〜10)。契約プランと同じく面談結果が「契約」の時だけ
+// 選択可能。未選択は 0 で表現する。
+export const STORE_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export type StoreCount = 0 | (typeof STORE_COUNT_OPTIONS)[number];
+
 export type InquiryEntry = {
   id: string;
   meetingDateTime: string; // "YYYY-MM-DDTHH:MM" (datetime-local 用)
@@ -32,6 +37,7 @@ export type InquiryEntry = {
   note: string;
   result: InquiryResult;
   contractPlan: ContractPlan;
+  storeCount: StoreCount;
   createdAt: string;
 };
 
@@ -61,6 +67,7 @@ export function blankEntry(): Omit<InquiryEntry, "id" | "createdAt"> {
     note: "",
     result: "",
     contractPlan: "",
+    storeCount: 0,
   };
 }
 
