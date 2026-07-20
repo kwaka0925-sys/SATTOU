@@ -138,7 +138,7 @@ export default function CancellationsView({
             <h2 className="font-semibold flex items-center gap-2">
               <UserX className="w-4 h-4 text-rose-600" /> 月別解約数
             </h2>
-            <div className="text-xs text-slate-500">継続列が「解約」を含む最初の月のみ集計 (同一クライアントは重複カウントしません)</div>
+            <div className="text-xs text-slate-500">翌月請求書シートの継続=解約 を稼働月 (実際の解約月) に集計 · 同一クライアントは重複カウントしません</div>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {monthlyCancellations.map(({ month, cancelled }) => {
