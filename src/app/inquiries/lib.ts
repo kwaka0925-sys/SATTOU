@@ -56,6 +56,29 @@ export function ensureMonth(store: Store, key: string): InquiryMonth {
   return existing;
 }
 
+// 全エントリーを走査し、meetingDateTime の月と保存キーが不一致なら
+// 正しい月に移動させた新しい Store を返す (idempotent)。
+// 過去に別月へ日付変更したのに保存先が古いままになっているデータを
+// 一括で正しいフォルダに振り分ける用途で、ロード時に呼ぶ想定。
+export function normalizeStore(store: Store): Store {
+  const result: Store = {};
+  // 既存キーは空 entries で先に作っておき、後段で振り分ける。
+  // こうすることで元の月が空になっても Store の形は保たれる。
+  Object.keys(store).forEach((k) => {
+    result[k] = { entries: [] };
+  });
+  Object.entries(store).forEach(([k, month]) => {
+    if (!month || !Array.isArray(month.entries)) return;
+    month.entries.forEach((e) => {
+      const raw = (e?.meetingDateTime ?? "").slice(0, 7);
+      const targetKey = /^\d{4}-\d{2}$/.test(raw) ? raw : k;
+      if (!result[targetKey]) result[targetKey] = { entries: [] };
+      result[targetKey].entries.push(e);
+    });
+  });
+  return result;
+}
+
 // 新規エントリーを作る際の空データ。id と createdAt はコンポーネント側で付与する。
 export function blankEntry(): Omit<InquiryEntry, "id" | "createdAt"> {
   return {

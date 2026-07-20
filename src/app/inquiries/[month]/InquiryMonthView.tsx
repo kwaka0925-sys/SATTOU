@@ -16,6 +16,7 @@ import {
   ensureMonth,
   monthKey as buildMonthKey,
   monthLabel,
+  normalizeStore,
   resultPillClass,
   type ContractPlan,
   type InquiryEntry,
@@ -40,9 +41,15 @@ export default function InquiryMonthView({ year, month }: Props) {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === "object") setStore(parsed);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (!parsed || typeof parsed !== "object") return;
+      // 既存データを月キーと meetingDateTime の整合が取れる形に正規化。
+      // 差分があれば localStorage にも書き戻して以後の読み込みを高速化する。
+      const normalized = normalizeStore(parsed as Store);
+      setStore(normalized);
+      if (JSON.stringify(normalized) !== JSON.stringify(parsed)) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
       }
     } catch {
       // ignore

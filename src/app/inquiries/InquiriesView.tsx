@@ -10,6 +10,7 @@ import {
   computeMonthStats,
   displayMonths,
   ensureMonth,
+  normalizeStore,
   type MonthStats,
   type Store,
 } from "./lib";
@@ -20,9 +21,15 @@ export default function InquiriesView() {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === "object") setStore(parsed);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (!parsed || typeof parsed !== "object") return;
+      // 既存データを月キーと meetingDateTime の整合が取れる形に正規化。
+      // 差分があれば localStorage にも書き戻す。
+      const normalized = normalizeStore(parsed as Store);
+      setStore(normalized);
+      if (JSON.stringify(normalized) !== JSON.stringify(parsed)) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
       }
     } catch {
       // ignore
