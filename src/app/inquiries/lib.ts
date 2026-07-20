@@ -8,9 +8,9 @@ export const START_YEAR = 2026;
 export const START_MONTH = 5;
 export const MONTHS_COUNT = 12;
 
-// 面談結果。ドロップダウンで選択する 3 択 + 未設定 (空文字)。
-// 月タイルの集計 (契約/断り/検討 の各件数) はこの値でグルーピングする。
-export const RESULT_OPTIONS = ["契約", "断り", "検討"] as const;
+// 面談結果。ドロップダウンで選択する 4 択 + 未設定 (空文字)。
+// 月タイルの集計 (契約/断り/検討/キャンセル の各件数) はこの値でグルーピングする。
+export const RESULT_OPTIONS = ["契約", "断り", "検討", "キャンセル"] as const;
 export type InquiryResult = (typeof RESULT_OPTIONS)[number] | "";
 
 // 契約プラン。面談結果が「契約」の場合にのみ選択可能な 3 択 + 未設定 (空文字)。
@@ -116,30 +116,36 @@ export type MonthStats = {
   contracted: number; // 契約
   declined: number; // 断り
   considering: number; // 検討
+  cancelled: number; // キャンセル
 };
 
 export function computeMonthStats(md: InquiryMonth): MonthStats {
   let contracted = 0;
   let declined = 0;
   let considering = 0;
+  let cancelled = 0;
   for (const e of md.entries) {
     if (e.result === "契約") contracted++;
     else if (e.result === "断り") declined++;
     else if (e.result === "検討") considering++;
+    else if (e.result === "キャンセル") cancelled++;
   }
   return {
     total: md.entries.length,
     contracted,
     declined,
     considering,
+    cancelled,
   };
 }
 
-// 面談結果のバッジ色。契約=緑 / 断り=赤 / 検討=琥珀 / 未設定=灰。
+// 面談結果のバッジ色。契約=緑 / 断り=赤 / 検討=琥珀 / キャンセル=グレー(濃) / 未設定=灰(薄)。
 export function resultPillClass(v: InquiryResult): string {
   if (v === "契約") return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
   if (v === "断り") return "bg-rose-100 text-rose-800 ring-1 ring-rose-200";
   if (v === "検討") return "bg-amber-100 text-amber-800 ring-1 ring-amber-200";
+  if (v === "キャンセル")
+    return "bg-zinc-200 text-zinc-700 ring-1 ring-zinc-300";
   return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
 }
 

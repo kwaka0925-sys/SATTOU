@@ -121,7 +121,7 @@ export default function InquiryMonthView({ year, month }: Props) {
     <div>
       <TopBar
         title={`新規問い合わせ · ${monthLabel(year, month)}`}
-        subtitle={`問い合わせ ${num(stats.total)} 件 · 契約 ${num(stats.contracted)} / 断り ${num(stats.declined)} / 検討 ${num(stats.considering)}`}
+        subtitle={`問い合わせ ${num(stats.total)} 件 · 契約 ${num(stats.contracted)} / 断り ${num(stats.declined)} / 検討 ${num(stats.considering)} / キャンセル ${num(stats.cancelled)}`}
       />
       <div className="p-6 space-y-4">
         {/* 月一覧へ戻る導線 */}
@@ -138,8 +138,8 @@ export default function InquiryMonthView({ year, month }: Props) {
           </div>
         </div>
 
-        {/* 月別の集計 KPI。詳細画面でも確認できるように 4 枚並べる。 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* 月別の集計 KPI。詳細画面でも確認できるように 5 枚並べる。 */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="card p-3">
             <div className="text-xs text-slate-500">問い合わせ数</div>
             <div className="text-xl font-semibold mt-0.5">
@@ -162,6 +162,12 @@ export default function InquiryMonthView({ year, month }: Props) {
             <div className="text-xs text-slate-500">検討数</div>
             <div className="text-xl font-semibold mt-0.5 text-amber-700">
               {num(stats.considering)}
+            </div>
+          </div>
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">キャンセル数</div>
+            <div className="text-xl font-semibold mt-0.5 text-zinc-700">
+              {num(stats.cancelled)}
             </div>
           </div>
         </div>

@@ -37,25 +37,27 @@ export default function InquiriesView() {
     let contracted = 0;
     let declined = 0;
     let considering = 0;
+    let cancelled = 0;
     for (const m of months) {
       const s = computeMonthStats(ensureMonth(store, m.key));
       total += s.total;
       contracted += s.contracted;
       declined += s.declined;
       considering += s.considering;
+      cancelled += s.cancelled;
     }
-    return { total, contracted, declined, considering };
+    return { total, contracted, declined, considering, cancelled };
   }, [months, store]);
 
   return (
     <div>
       <TopBar
         title="新規問い合わせ"
-        subtitle={`2026年5月〜2027年4月 · 全期間合計 問い合わせ ${overall.total} / 契約 ${overall.contracted} / 断り ${overall.declined} / 検討 ${overall.considering}`}
+        subtitle={`2026年5月〜2027年4月 · 全期間合計 問い合わせ ${overall.total} / 契約 ${overall.contracted} / 断り ${overall.declined} / 検討 ${overall.considering} / キャンセル ${overall.cancelled}`}
       />
       <div className="p-6 space-y-4">
-        {/* 期間合計 KPI — 開くたびに一目で分かるように 4 枚並べる。 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* 期間合計 KPI — 開くたびに一目で分かるように 5 枚並べる。 */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="card p-3">
             <div className="text-xs text-slate-500">問い合わせ数</div>
             <div className="text-xl font-semibold mt-0.5">
@@ -78,6 +80,12 @@ export default function InquiriesView() {
             <div className="text-xs text-slate-500">検討数</div>
             <div className="text-xl font-semibold mt-0.5 text-amber-700">
               {num(overall.considering)}
+            </div>
+          </div>
+          <div className="card p-3">
+            <div className="text-xs text-slate-500">キャンセル数</div>
+            <div className="text-xl font-semibold mt-0.5 text-zinc-700">
+              {num(overall.cancelled)}
             </div>
           </div>
         </div>
@@ -108,9 +116,9 @@ export default function InquiriesView() {
                     問い合わせ {num(s.total)}
                   </span>
                 </div>
-                {/* 面談結果の 3 分類を並べて表示。0 件でもラベル表示することで
+                {/* 面談結果の 4 分類を並べて表示。0 件でもラベル表示することで
                     「全月同じ見た目」に揃える。 */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <div className="rounded-md bg-emerald-50 text-emerald-800 px-2 py-1.5 text-center">
                     <div className="text-[10px] text-emerald-700">契約</div>
                     <div className="text-base font-semibold tabular-nums">
@@ -127,6 +135,12 @@ export default function InquiriesView() {
                     <div className="text-[10px] text-amber-700">検討</div>
                     <div className="text-base font-semibold tabular-nums">
                       {num(s.considering)}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-zinc-100 text-zinc-800 px-2 py-1.5 text-center">
+                    <div className="text-[10px] text-zinc-600">キャンセル</div>
+                    <div className="text-base font-semibold tabular-nums">
+                      {num(s.cancelled)}
                     </div>
                   </div>
                 </div>
