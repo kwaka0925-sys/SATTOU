@@ -68,6 +68,19 @@ export default function InquiryMonthView({ year, month }: Props) {
   const md = useMemo(() => ensureMonth(store, key), [store, key]);
   const stats = useMemo(() => computeMonthStats(md), [md]);
 
+  // 表示は面談日時の昇順 (7/1 → 7/31)。日時未設定の行は最後に回す。
+  // meetingDateTime は "YYYY-MM-DDTHH:MM" 形式なので文字列比較で日時順になる。
+  const sortedEntries = useMemo(() => {
+    return [...md.entries].sort((a, b) => {
+      const aTime = (a.meetingDateTime || "").trim();
+      const bTime = (b.meetingDateTime || "").trim();
+      if (!aTime && !bTime) return 0;
+      if (!aTime) return 1;
+      if (!bTime) return -1;
+      return aTime.localeCompare(bTime);
+    });
+  }, [md.entries]);
+
   const updateEntry = useCallback(
     (entryId: string, patch: Partial<InquiryEntry>) => {
       const currentEntry = md.entries.find((e) => e.id === entryId);
@@ -245,7 +258,7 @@ export default function InquiryMonthView({ year, month }: Props) {
                     </td>
                   </tr>
                 )}
-                {md.entries.map((e) => (
+                {sortedEntries.map((e) => (
                   <tr key={e.id} className="hover:bg-slate-50/50">
                     <td className="px-3 py-2">
                       <input
