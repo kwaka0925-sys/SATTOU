@@ -331,28 +331,36 @@ export default function InquiriesView() {
                     問い合わせ {num(s.total)}
                   </span>
                 </div>
-                {/* 面談結果の 4 分類を並べて表示。0 件でもラベル表示することで
-                    「全月同じ見た目」に揃える。 */}
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="rounded-md bg-emerald-50 text-emerald-800 px-2 py-1.5 text-center">
-                    <div className="text-[10px] text-emerald-700">契約</div>
+                {/* 面談結果の 5 分類 (成約 / 成約率 / 断り / 検討 / キャンセル) を
+                    幅を詰めて並べる。0 件でもラベル表示することで全月同じ見た目に揃える。 */}
+                <div className="grid grid-cols-5 gap-1">
+                  <div className="rounded-md bg-emerald-50 text-emerald-800 px-1.5 py-1 text-center">
+                    <div className="text-[10px] text-emerald-700">成約</div>
                     <div className="text-base font-semibold tabular-nums">
                       {num(s.contracted)}
                     </div>
                   </div>
-                  <div className="rounded-md bg-rose-50 text-rose-800 px-2 py-1.5 text-center">
+                  <div className="rounded-md bg-brand-50 text-brand-800 px-1.5 py-1 text-center">
+                    <div className="text-[10px] text-brand-700">成約率</div>
+                    <div className="text-base font-semibold tabular-nums">
+                      {s.total > 0
+                        ? `${Math.round((s.contracted / s.total) * 100)}%`
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-rose-50 text-rose-800 px-1.5 py-1 text-center">
                     <div className="text-[10px] text-rose-700">断り</div>
                     <div className="text-base font-semibold tabular-nums">
                       {num(s.declined)}
                     </div>
                   </div>
-                  <div className="rounded-md bg-amber-50 text-amber-800 px-2 py-1.5 text-center">
+                  <div className="rounded-md bg-amber-50 text-amber-800 px-1.5 py-1 text-center">
                     <div className="text-[10px] text-amber-700">検討</div>
                     <div className="text-base font-semibold tabular-nums">
                       {num(s.considering)}
                     </div>
                   </div>
-                  <div className="rounded-md bg-zinc-100 text-zinc-800 px-2 py-1.5 text-center">
+                  <div className="rounded-md bg-zinc-100 text-zinc-800 px-1.5 py-1 text-center">
                     <div className="text-[10px] text-zinc-600">キャンセル</div>
                     <div className="text-base font-semibold tabular-nums">
                       {num(s.cancelled)}
