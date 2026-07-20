@@ -13,6 +13,15 @@ export const MONTHS_COUNT = 12;
 export const RESULT_OPTIONS = ["契約", "断り", "検討"] as const;
 export type InquiryResult = (typeof RESULT_OPTIONS)[number] | "";
 
+// 契約プラン。面談結果が「契約」の場合にのみ選択可能な 3 択 + 未設定 (空文字)。
+// 「断り」「検討」「未設定」の時はテーブル側で選択 UI 自体を非表示にする。
+export const CONTRACT_PLAN_OPTIONS = [
+  "システム＋マーケ",
+  "システムのみ",
+  "マーケのみ",
+] as const;
+export type ContractPlan = (typeof CONTRACT_PLAN_OPTIONS)[number] | "";
+
 export type InquiryEntry = {
   id: string;
   meetingDateTime: string; // "YYYY-MM-DDTHH:MM" (datetime-local 用)
@@ -22,6 +31,7 @@ export type InquiryEntry = {
   content: string; // 問い合わせフォームの本文
   note: string;
   result: InquiryResult;
+  contractPlan: ContractPlan;
   createdAt: string;
 };
 
@@ -50,6 +60,7 @@ export function blankEntry(): Omit<InquiryEntry, "id" | "createdAt"> {
     content: "",
     note: "",
     result: "",
+    contractPlan: "",
   };
 }
 
@@ -122,5 +133,16 @@ export function resultPillClass(v: InquiryResult): string {
   if (v === "契約") return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
   if (v === "断り") return "bg-rose-100 text-rose-800 ring-1 ring-rose-200";
   if (v === "検討") return "bg-amber-100 text-amber-800 ring-1 ring-amber-200";
+  return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
+}
+
+// 契約プランのバッジ色。面談結果の色 (緑/赤/琥珀) と被らないパレットを選ぶ。
+export function contractPlanPillClass(v: ContractPlan): string {
+  if (v === "システム＋マーケ")
+    return "bg-violet-100 text-violet-800 ring-1 ring-violet-200";
+  if (v === "システムのみ")
+    return "bg-sky-100 text-sky-800 ring-1 ring-sky-200";
+  if (v === "マーケのみ")
+    return "bg-fuchsia-100 text-fuchsia-800 ring-1 ring-fuchsia-200";
   return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
 }

@@ -8,12 +8,15 @@ import { num } from "@/lib/format";
 import {
   STORAGE_KEY,
   RESULT_OPTIONS,
+  CONTRACT_PLAN_OPTIONS,
   blankEntry,
   computeMonthStats,
+  contractPlanPillClass,
   ensureMonth,
   monthKey as buildMonthKey,
   monthLabel,
   resultPillClass,
+  type ContractPlan,
   type InquiryEntry,
   type InquiryResult,
   type Store,
@@ -181,6 +184,9 @@ export default function InquiryMonthView({ year, month }: Props) {
                   <th className="text-left font-medium px-3 py-2 min-w-[130px]">
                     面談結果
                   </th>
+                  <th className="text-left font-medium px-3 py-2 min-w-[160px]">
+                    契約プラン
+                  </th>
                   <th className="text-left font-medium px-3 py-2 w-[60px]"></th>
                 </tr>
               </thead>
@@ -188,7 +194,7 @@ export default function InquiryMonthView({ year, month }: Props) {
                 {md.entries.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       まだ問い合わせがありません。「問い合わせを追加」から入力を始めてください。
@@ -267,11 +273,15 @@ export default function InquiryMonthView({ year, month }: Props) {
                     <td className="px-3 py-2">
                       <select
                         value={e.result}
-                        onChange={(ev) =>
-                          updateEntry(e.id, {
-                            result: ev.target.value as InquiryResult,
-                          })
-                        }
+                        onChange={(ev) => {
+                          const next = ev.target.value as InquiryResult;
+                          // 契約以外に切り替えた時は契約プランを自動で消す。
+                          // 契約プラン欄が使えるのは面談結果 = 契約 の時だけ、という
+                          // ルールを保存側でも維持する。
+                          const patch: Partial<InquiryEntry> = { result: next };
+                          if (next !== "契約") patch.contractPlan = "";
+                          updateEntry(e.id, patch);
+                        }}
                         className={`input text-sm w-full font-medium ${resultPillClass(e.result)}`}
                       >
                         <option value="" className="bg-white text-slate-900">
@@ -287,6 +297,38 @@ export default function InquiryMonthView({ year, month }: Props) {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      {/* 契約プランは面談結果 = 契約 の時だけ選択できる。
+                          それ以外の行では列の存在は保ちつつ中身を空にする。 */}
+                      {e.result === "契約" ? (
+                        <select
+                          value={e.contractPlan ?? ""}
+                          onChange={(ev) =>
+                            updateEntry(e.id, {
+                              contractPlan: ev.target.value as ContractPlan,
+                            })
+                          }
+                          className={`input text-sm w-full font-medium ${contractPlanPillClass(
+                            (e.contractPlan ?? "") as ContractPlan,
+                          )}`}
+                        >
+                          <option value="" className="bg-white text-slate-900">
+                            未選択
+                          </option>
+                          {CONTRACT_PLAN_OPTIONS.map((p) => (
+                            <option
+                              key={p}
+                              value={p}
+                              className="bg-white text-slate-900"
+                            >
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
