@@ -63,10 +63,31 @@ export default function InquiryMonthView({ year, month }: Props) {
 
   const updateEntry = useCallback(
     (entryId: string, patch: Partial<InquiryEntry>) => {
-      const nextEntries = md.entries.map((e) =>
-        e.id === entryId ? { ...e, ...patch } : e,
-      );
-      persist({ ...store, [key]: { entries: nextEntries } });
+      const currentEntry = md.entries.find((e) => e.id === entryId);
+      if (!currentEntry) return;
+      const updated: InquiryEntry = { ...currentEntry, ...patch };
+
+      // 面談日時が変わって別の月になったら、その月のフォルダに自動移動する。
+      // meetingDateTime は "YYYY-MM-DDTHH:MM"。空 or 不正な値は現在の月にとどめる。
+      const rawMonth = (updated.meetingDateTime || "").slice(0, 7);
+      const targetKey = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : key;
+
+      if (targetKey === key) {
+        const nextEntries = md.entries.map((e) =>
+          e.id === entryId ? updated : e,
+        );
+        persist({ ...store, [key]: { entries: nextEntries } });
+        return;
+      }
+
+      // 別月に移動: 現在の月から削除して、対象月の末尾に追加する。
+      const remaining = md.entries.filter((e) => e.id !== entryId);
+      const targetMd = ensureMonth(store, targetKey);
+      persist({
+        ...store,
+        [key]: { entries: remaining },
+        [targetKey]: { entries: [...targetMd.entries, updated] },
+      });
     },
     [md.entries, store, key, persist],
   );
@@ -147,11 +168,16 @@ export default function InquiryMonthView({ year, month }: Props) {
 
         {/* エントリーテーブル (インライン編集 + 追加/削除) */}
         <section className="card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-brand-600" />
-              {monthLabel(year, month)} の問い合わせ
-            </h2>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-brand-600" />
+                {monthLabel(year, month)} の問い合わせ
+              </h2>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                面談日時を別の月に変更すると、その月のフォルダへ自動で移動します。
+              </div>
+            </div>
             <button
               type="button"
               onClick={addEntry}
