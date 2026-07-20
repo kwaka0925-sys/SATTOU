@@ -110,22 +110,29 @@ export default function InquiriesView() {
     setActiveFilter((prev) => (prev === v ? null : v));
 
   // 絞り込み用ボタンの共通スタイル生成。active 時はリング表示。
+  // タイルが 6 枚並ぶので余白を控えめに (px-3 py-2)。
   const filterBtnClass = (v: FilterableResult, activeRing: string) =>
-    `card p-3 text-left w-full transition-colors hover:bg-slate-50 ${
+    `card px-3 py-2 text-left w-full transition-colors hover:bg-slate-50 ${
       activeFilter === v ? activeRing : ""
     }`;
+
+  // 成約率 = 成約数 (契約) ÷ 問い合わせ数。総数 0 の時は "—"。
+  const conversionRateLabel =
+    overall.total > 0
+      ? `${Math.round((overall.contracted / overall.total) * 100)}%`
+      : "—";
 
   return (
     <div>
       <TopBar
         title="新規問い合わせ"
-        subtitle={`2026年5月〜2027年4月 · 全期間合計 問い合わせ ${overall.total} / 契約 ${overall.contracted} / 断り ${overall.declined} / 検討 ${overall.considering} / キャンセル ${overall.cancelled}`}
+        subtitle={`2026年5月〜2027年4月 · 全期間合計 問い合わせ ${overall.total} / 成約 ${overall.contracted} (${conversionRateLabel}) / 断り ${overall.declined} / 検討 ${overall.considering} / キャンセル ${overall.cancelled}`}
       />
       <div className="p-6 space-y-4">
-        {/* 期間合計 KPI — 開くたびに一目で分かるように 5 枚並べる。
-            契約/断り/検討/キャンセル はクリックで下に内訳を展開する。 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="card p-3">
+        {/* 期間合計 KPI — 6 枚並ぶので余白は控えめ。
+            成約/断り/検討/キャンセル はクリックで下に内訳を展開する。 */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <div className="card px-3 py-2">
             <div className="text-xs text-slate-500">問い合わせ数</div>
             <div className="text-xl font-semibold mt-0.5">
               {num(overall.total)}
@@ -139,11 +146,18 @@ export default function InquiriesView() {
               "ring-2 ring-emerald-400 bg-emerald-50/40",
             )}
           >
-            <div className="text-xs text-slate-500">契約数</div>
+            <div className="text-xs text-slate-500">成約数</div>
             <div className="text-xl font-semibold mt-0.5 text-emerald-700">
               {num(overall.contracted)}
             </div>
           </button>
+          {/* 成約率タイルは絞り込みボタンではない (集計値なのでフィルタ対象にならない) */}
+          <div className="card px-3 py-2">
+            <div className="text-xs text-slate-500">成約率</div>
+            <div className="text-xl font-semibold mt-0.5 text-brand-700 tabular-nums">
+              {conversionRateLabel}
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => toggleFilter("断り")}
