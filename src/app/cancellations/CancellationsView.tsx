@@ -59,11 +59,23 @@ export default function CancellationsView({
   }, []);
 
   const monthlyCancellations = useMemo(() => {
+    // 同一クライアントが複数月のシートで「解約」表記のままコピーされて残っていても、
+    // ここでは「一番早く解約が現れた月」だけカウントする。
+    // 判定キー = 加入者識別番号 (無ければサロン名)。両方欠けている行は
+    // 重複判定不能なのでそのまま含める (フォールバック)。
+    // monthlyRows は Promise.all の入力順 = 1月→12月 の時系列なので、
+    // ここで前から seen に積んでいけば最古の月にだけ残る形になる。
+    const seen = new Set<string>();
     return monthlyRows.map(({ month, rows }) => {
       const cancelled = rows.filter((r) => {
         const overrideSub = overrides[r.id]?.subscriptionStatus;
         const effective = overrideSub ?? r.subscriptionStatus ?? "";
-        return effective.includes("解約");
+        if (!effective.includes("解約")) return false;
+        const key = (r.subscriberId ?? r.clientName ?? "").trim();
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
       return { month, cancelled };
     });
@@ -126,7 +138,7 @@ export default function CancellationsView({
             <h2 className="font-semibold flex items-center gap-2">
               <UserX className="w-4 h-4 text-rose-600" /> 月別解約数
             </h2>
-            <div className="text-xs text-slate-500">継続列が「解約」を含む行を集計</div>
+            <div className="text-xs text-slate-500">継続列が「解約」を含む最初の月のみ集計 (同一クライアントは重複カウントしません)</div>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {monthlyCancellations.map(({ month, cancelled }) => {
