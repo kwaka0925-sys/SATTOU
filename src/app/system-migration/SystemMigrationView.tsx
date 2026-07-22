@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
-import { AlertTriangle, ArrowRightLeft, Filter, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Search,
+} from "lucide-react";
 import { num } from "@/lib/format";
 import type { SheetInvoice } from "@/lib/sheets";
 
@@ -28,6 +36,10 @@ type Props = {
 };
 
 type StatusFilter = "all" | "completed" | "blank";
+
+// テーブルの並べ替え対象と方向。null は元の (識別番号) 順。
+type SortKey = "migrationDate" | "plannedDate";
+type SortDir = "asc" | "desc";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-");
@@ -64,6 +76,9 @@ export default function SystemMigrationView({
   const [migrations, setMigrations] = useState<MigrationMap>({});
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // 並び替えの現在状態。sortKey=null なら元の順 (シート順) をキープ。
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   useEffect(() => {
     try {
@@ -175,6 +190,38 @@ export default function SystemMigrationView({
     });
   }, [rows, migrations, statusFilter, q]);
 
+  // 並び替えを適用。sortKey が null なら filtered をそのまま返す。
+  // YYYY-MM-DD は文字列比較で日付順になるので localeCompare で十分。
+  // 日付未入力の行は常に最下部に置いて表示を安定させる。
+  const sortedFiltered = useMemo(() => {
+    if (!sortKey) return filtered;
+    const dirMul = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = getStatus(migrations, a.clientName)[sortKey];
+      const bv = getStatus(migrations, b.clientName)[sortKey];
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av.localeCompare(bv) * dirMul;
+    });
+  }, [filtered, migrations, sortKey, sortDir]);
+
+  // 列ヘッダクリックで昇順→降順→解除 を巡回する共通ハンドラ。
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey !== key) {
+        setSortKey(key);
+        setSortDir("asc");
+      } else if (sortDir === "asc") {
+        setSortDir("desc");
+      } else {
+        setSortKey(null);
+        setSortDir("asc");
+      }
+    },
+    [sortKey, sortDir],
+  );
+
   const totals = useMemo(() => {
     let completed = 0;
     let blank = 0;
@@ -195,7 +242,7 @@ export default function SystemMigrationView({
     <div className="h-screen flex flex-col">
       <TopBar
         title="新システム移行"
-        subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${filtered.length} 社`}
+        subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${sortedFiltered.length} 社`}
       />
       <div className="shrink-0 p-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
@@ -318,10 +365,40 @@ export default function SystemMigrationView({
                     システム移行
                   </th>
                   <th className="text-left font-medium px-4 py-3 w-[160px]">
-                    システム移行日
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("migrationDate")}
+                      className="inline-flex items-center gap-1 hover:text-brand-700"
+                    >
+                      システム移行日
+                      {sortKey === "migrationDate" ? (
+                        sortDir === "asc" ? (
+                          <ChevronUp className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </button>
                   </th>
                   <th className="text-left font-medium px-4 py-3 w-[160px]">
-                    システム移行予定日
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("plannedDate")}
+                      className="inline-flex items-center gap-1 hover:text-brand-700"
+                    >
+                      システム移行予定日
+                      {sortKey === "plannedDate" ? (
+                        sortDir === "asc" ? (
+                          <ChevronUp className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </button>
                   </th>
                   <th className="text-left font-medium px-4 py-3 min-w-[320px]">
                     メモ
@@ -329,7 +406,7 @@ export default function SystemMigrationView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 && (
+                {sortedFiltered.length === 0 && (
                   <tr>
                     <td
                       colSpan={8}
@@ -339,7 +416,7 @@ export default function SystemMigrationView({
                     </td>
                   </tr>
                 )}
-                {filtered.map((r) => {
+                {sortedFiltered.map((r) => {
                   const status = getStatus(migrations, r.clientName);
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
