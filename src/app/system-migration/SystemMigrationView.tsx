@@ -13,6 +13,7 @@ type MigrationStatus = {
   completed: boolean;
   migrationDate: string; // YYYY-MM-DD (実施日)
   plannedDate: string; // YYYY-MM-DD (予定日)
+  note: string; // 自由記入メモ
 };
 
 type MigrationMap = Record<string, MigrationStatus>;
@@ -41,12 +42,14 @@ function monthTitle(month: string): string {
 }
 
 // クライアントの status を取り出す (存在しなければ既定値)
+// 旧レコードには note が無い場合があるので空文字にフォールバック。
 function getStatus(map: MigrationMap, key: string): MigrationStatus {
   const stored = map[key];
   return {
     completed: stored?.completed ?? false,
     migrationDate: stored?.migrationDate ?? "",
     plannedDate: stored?.plannedDate ?? "",
+    note: stored?.note ?? "",
   };
 }
 
@@ -141,6 +144,22 @@ export default function SystemMigrationView({
     },
     [],
   );
+
+  const setNote = useCallback((clientName: string, note: string) => {
+    setMigrations((prev) => {
+      const current = getStatus(prev, clientName);
+      const next = {
+        ...prev,
+        [clientName]: { ...current, note },
+      };
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -304,13 +323,16 @@ export default function SystemMigrationView({
                   <th className="text-left font-medium px-4 py-3 w-[160px]">
                     システム移行予定日
                   </th>
+                  <th className="text-left font-medium px-4 py-3 min-w-[320px]">
+                    メモ
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       表示できるクライアントがありません。
@@ -368,6 +390,15 @@ export default function SystemMigrationView({
                             setPlannedDate(r.clientName, e.target.value)
                           }
                           className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={status.note}
+                          onChange={(e) => setNote(r.clientName, e.target.value)}
+                          placeholder="メモを入力"
+                          className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
                         />
                       </td>
                     </tr>
