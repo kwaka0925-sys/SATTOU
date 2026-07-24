@@ -152,6 +152,8 @@ export default function AdsView({
   const [until, setUntil] = useState(defaultRange.until);
   const [sync, setSync] = useState<SyncState>({ status: "idle" });
   const [writeback, setWriteback] = useState<WritebackState>({ status: "idle" });
+  // 「N 社でエラー」チップを押した時に、詳細リストを展開表示するかのフラグ。
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
 
   // 「同期済み」の値を効かせる対象。loading 中もキャッシュ表示を維持したいので
   // success と loading.previous の両方を見る。
@@ -612,24 +614,66 @@ export default function AdsView({
               loading/error の裏にキャッシュされている previous がある時も出す。
               「開いた瞬間に前回の値が見える + 最終同期時刻」を実現するため。 */}
           {activeSuccess && (
-            <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-2">
-              <span className="text-emerald-700 font-medium">
-                ✓ 最終同期: {formatSyncedAt(activeSuccess.syncedAt)}
-              </span>
-              <span className="text-slate-500">
-                期間 {activeSuccess.since} 〜 {activeSuccess.until}
-              </span>
-              <span>
-                対象 {activeSuccess.matched} 社 / 合計 {yen(activeSuccess.totalSpend)}
-              </span>
-              {activeSuccess.errorCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-amber-700">
-                  <AlertTriangle className="w-3 h-3" />
-                  {activeSuccess.errorCount} 社でエラー
+            <div className="text-xs text-slate-600 border-t border-slate-100 pt-2 space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-emerald-700 font-medium">
+                  ✓ 最終同期: {formatSyncedAt(activeSuccess.syncedAt)}
                 </span>
-              )}
-              {sync.status === "loading" && (
-                <span className="text-slate-400">最新に更新中...</span>
+                <span className="text-slate-500">
+                  期間 {activeSuccess.since} 〜 {activeSuccess.until}
+                </span>
+                <span>
+                  対象 {activeSuccess.matched} 社 / 合計 {yen(activeSuccess.totalSpend)}
+                </span>
+                {activeSuccess.errorCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setErrorDetailsOpen((v) => !v)}
+                    className="inline-flex items-center gap-1 text-amber-700 hover:text-amber-800 hover:underline"
+                    title="クリックで詳細を表示"
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    {activeSuccess.errorCount} 社でエラー
+                    <span className="text-[10px] text-amber-600">
+                      {errorDetailsOpen ? "▲ 閉じる" : "▼ 詳細"}
+                    </span>
+                  </button>
+                )}
+                {sync.status === "loading" && (
+                  <span className="text-slate-400">最新に更新中...</span>
+                )}
+              </div>
+              {/* エラーになったクライアントの一覧。上の「N 社でエラー」を押した時だけ表示。
+                  Meta の広告アカウントに広告費が無い月は Insight API が空を返し、
+                  ここでは「no ads」的なメッセージが並ぶことが多い。 */}
+              {errorDetailsOpen && activeSuccess.errorCount > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 space-y-1">
+                  <div className="text-[11px] text-amber-800 font-medium">
+                    Meta から広告費が取得できなかったクライアント (
+                    {activeSuccess.errorCount} 社):
+                  </div>
+                  <ul className="space-y-0.5">
+                    {activeSuccess.results
+                      .filter((r) => r.error)
+                      .map((r) => (
+                        <li
+                          key={r.clientKey}
+                          className="flex flex-wrap items-baseline gap-x-2 text-[11px]"
+                        >
+                          <span className="font-medium text-slate-800">
+                            {r.clientName || r.clientKey}
+                          </span>
+                          <span className="text-slate-500 font-mono">
+                            {r.adAccountId}
+                          </span>
+                          <span className="text-amber-700">— {r.error}</span>
+                        </li>
+                      ))}
+                  </ul>
+                  <div className="text-[10px] text-slate-500 pt-1">
+                    ※ 期間内に広告費が発生していない場合や、広告アカウントが停止している場合にもここに表示されます。
+                  </div>
+                </div>
               )}
             </div>
           )}
