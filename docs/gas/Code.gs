@@ -169,10 +169,8 @@ function getOrCreateMigrationSheet_() {
     .setFontWeight('bold')
     .setBackground('#f1f5f9');
   sheet.setFrozenRows(1);
-  // C 列だけチェックボックス化 (2〜1000 行分あらかじめ)。
-  sheet
-    .getRange(2, MIGRATION_COL.completed, 999, 1)
-    .insertCheckboxes();
+  // チェックボックスは行追加時に個別に敷く。
+  // 事前一括挿入は getLastRow() を膨らませて挿入位置がずれる原因になる。
   return sheet;
 }
 
@@ -203,6 +201,12 @@ function handleGetMigrations_() {
 
 // 単一行の upsert。既存の subscriberId があれば patch を当てる、無ければ末尾に追加。
 // リクエスト: { token, action: "upsertMigration", subscriberId, clientName, patch: { completed?, migrationDate?, plannedDate?, note? } }
+//
+// 実装ノート:
+//   - 挿入位置は A 列 (subscriberId) の実データだけを走査して決める。
+//     getLastRow() は空セルでもチェックボックスなどが挿入されていると値を返すので、
+//     それに頼ると挿入位置が狂ってサロン名などの上書きに失敗する。
+//   - 2 ユーザー同時編集での競合を防ぐため LockService で 15 秒待機する。
 function handleUpsertMigration_(params) {
   const subscriberId = String(params.subscriberId || '').trim();
   if (!subscriberId) {
@@ -211,63 +215,80 @@ function handleUpsertMigration_(params) {
   const patch = params.patch || {};
   const clientName = String(params.clientName || '').trim();
 
-  const sheet = getOrCreateMigrationSheet_();
-  const lastRow = sheet.getLastRow();
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ error: 'sheet is busy, retry shortly' });
+  }
+  try {
+    const sheet = getOrCreateMigrationSheet_();
+    const maxRows = sheet.getMaxRows();
 
-  // 既存行を線形探索。件数が数百なので十分。
-  var rowIndex = -1;
-  if (lastRow >= 2) {
-    var sidRange = sheet
-      .getRange(2, MIGRATION_COL.subscriberId, lastRow - 1, 1)
-      .getValues();
-    for (var i = 0; i < sidRange.length; i++) {
-      if (String(sidRange[i][0] || '').trim() === subscriberId) {
-        rowIndex = i + 2;
-        break;
+    // A 列 (subscriberId) を 1 度読み込み、
+    //   1) 同じ subscriberId の既存行 (matchRow)
+    //   2) A 列に何か入っている最後の行 (lastDataRow)
+    // を同時に確定する。
+    var matchRow = -1;
+    var lastDataRow = 1; // ヘッダのみ
+    if (maxRows >= 2) {
+      const colA = sheet.getRange(2, 1, maxRows - 1, 1).getValues();
+      for (var i = 0; i < colA.length; i++) {
+        var v = String(colA[i][0] || '').trim();
+        if (!v) continue;
+        if (i + 2 > lastDataRow) lastDataRow = i + 2;
+        if (matchRow < 0 && v === subscriberId) {
+          matchRow = i + 2;
+        }
       }
     }
-  }
 
-  if (rowIndex < 0) {
-    // 末尾に新規行を追加。デフォルト値を入れておく。
-    rowIndex = Math.max(lastRow, 1) + 1;
-    sheet
-      .getRange(rowIndex, 1, 1, MIGRATION_HEADER.length)
-      .setValues([[subscriberId, clientName, false, '', '', '']]);
-    // 追加行の C 列にチェックボックスを敷く。
-    sheet
-      .getRange(rowIndex, MIGRATION_COL.completed)
-      .insertCheckboxes();
-  } else if (clientName) {
-    // clientName が変わった時のために B 列だけ最新化する。
-    sheet.getRange(rowIndex, MIGRATION_COL.clientName).setValue(clientName);
-  }
+    var rowIndex;
+    if (matchRow < 0) {
+      rowIndex = lastDataRow + 1;
+      sheet
+        .getRange(rowIndex, 1, 1, MIGRATION_HEADER.length)
+        .setValues([[subscriberId, clientName, false, '', '', '']]);
+      // 追加行の C 列にチェックボックスを敷く (行ごと個別)。
+      sheet
+        .getRange(rowIndex, MIGRATION_COL.completed)
+        .insertCheckboxes();
+    } else {
+      rowIndex = matchRow;
+      // clientName が変わった時のために B 列だけ最新化する。
+      if (clientName) {
+        sheet.getRange(rowIndex, MIGRATION_COL.clientName).setValue(clientName);
+      }
+    }
 
-  if (patch.hasOwnProperty('completed')) {
-    sheet
-      .getRange(rowIndex, MIGRATION_COL.completed)
-      .setValue(!!patch.completed);
+    if (patch.hasOwnProperty('completed')) {
+      sheet
+        .getRange(rowIndex, MIGRATION_COL.completed)
+        .setValue(!!patch.completed);
+    }
+    if (patch.hasOwnProperty('migrationDate')) {
+      sheet
+        .getRange(rowIndex, MIGRATION_COL.migrationDate)
+        .setValue(patch.migrationDate == null ? '' : String(patch.migrationDate));
+    }
+    if (patch.hasOwnProperty('plannedDate')) {
+      sheet
+        .getRange(rowIndex, MIGRATION_COL.plannedDate)
+        .setValue(patch.plannedDate == null ? '' : String(patch.plannedDate));
+    }
+    if (patch.hasOwnProperty('note')) {
+      sheet
+        .getRange(rowIndex, MIGRATION_COL.note)
+        .setValue(patch.note == null ? '' : String(patch.note));
+    }
+    return jsonResponse({
+      ok: true,
+      sheet: sheet.getName(),
+      rowIndex: rowIndex,
+    });
+  } finally {
+    lock.releaseLock();
   }
-  if (patch.hasOwnProperty('migrationDate')) {
-    sheet
-      .getRange(rowIndex, MIGRATION_COL.migrationDate)
-      .setValue(patch.migrationDate == null ? '' : String(patch.migrationDate));
-  }
-  if (patch.hasOwnProperty('plannedDate')) {
-    sheet
-      .getRange(rowIndex, MIGRATION_COL.plannedDate)
-      .setValue(patch.plannedDate == null ? '' : String(patch.plannedDate));
-  }
-  if (patch.hasOwnProperty('note')) {
-    sheet
-      .getRange(rowIndex, MIGRATION_COL.note)
-      .setValue(patch.note == null ? '' : String(patch.note));
-  }
-  return jsonResponse({
-    ok: true,
-    sheet: sheet.getName(),
-    rowIndex: rowIndex,
-  });
 }
 
 // 日付セルは Date 型で入っている場合と文字列の場合があるので、
