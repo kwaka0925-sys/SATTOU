@@ -100,6 +100,12 @@ function doGet(e) {
     return jsonResponse({ error: 'unauthorized' }, 401);
   }
 
+  // action=migrations: 「新システム移行」タブ全件を返す。
+  // これは月に依存しないので month パラメータは無視する。
+  if (params.action === 'migrations') {
+    return handleGetMigrations_();
+  }
+
   const month = params.month || currentMonth_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const match = resolveSheet_(ss, month);
@@ -116,6 +122,162 @@ function doGet(e) {
 
   const rows = readRows_(match);
   return jsonResponse({ month, sheet: match.getName(), rows });
+}
+
+// -------------------------------------------------------------------
+// 新システム移行タブ (共有データ)
+//
+// このタブは請求書の月別タブとは独立で、識別番号を主キーに 1 行 = 1 クライアント。
+// 列 (1 行目にヘッダ、2 行目以降にデータ):
+//   A: 加入者識別番号 (主キー)
+//   B: サロン名        (人間が見るためのラベル。上書き参照)
+//   C: 移行完了         (TRUE / FALSE)
+//   D: システム移行日   (yyyy-MM-dd 文字列)
+//   E: システム移行予定日 (yyyy-MM-dd 文字列)
+//   F: メモ             (自由テキスト)
+//
+// タブが無ければ 1 度だけ自動作成する。sattou 側からの初回アクセス時に、
+// 手作業でタブを作らなくてもすぐ使えるようにする。
+// -------------------------------------------------------------------
+
+const MIGRATION_SHEET_NAME = '新システム移行';
+const MIGRATION_HEADER = [
+  '加入者識別番号',
+  'サロン名',
+  '移行完了',
+  'システム移行日',
+  'システム移行予定日',
+  'メモ',
+];
+const MIGRATION_COL = {
+  subscriberId: 1,
+  clientName: 2,
+  completed: 3,
+  migrationDate: 4,
+  plannedDate: 5,
+  note: 6,
+};
+
+function getOrCreateMigrationSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(MIGRATION_SHEET_NAME);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(MIGRATION_SHEET_NAME);
+  sheet
+    .getRange(1, 1, 1, MIGRATION_HEADER.length)
+    .setValues([MIGRATION_HEADER])
+    .setFontWeight('bold')
+    .setBackground('#f1f5f9');
+  sheet.setFrozenRows(1);
+  // C 列だけチェックボックス化 (2〜1000 行分あらかじめ)。
+  sheet
+    .getRange(2, MIGRATION_COL.completed, 999, 1)
+    .insertCheckboxes();
+  return sheet;
+}
+
+// migrations タブ全件を { subscriberId → { completed, migrationDate, plannedDate, note, clientName } } の形で返す。
+function handleGetMigrations_() {
+  const sheet = getOrCreateMigrationSheet_();
+  const lastRow = sheet.getLastRow();
+  const out = {};
+  if (lastRow < 2) {
+    return jsonResponse({ ok: true, sheet: sheet.getName(), migrations: out });
+  }
+  const range = sheet.getRange(2, 1, lastRow - 1, MIGRATION_HEADER.length);
+  const values = range.getValues();
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var sid = String(row[MIGRATION_COL.subscriberId - 1] || '').trim();
+    if (!sid) continue;
+    out[sid] = {
+      clientName: String(row[MIGRATION_COL.clientName - 1] || '').trim(),
+      completed: row[MIGRATION_COL.completed - 1] === true,
+      migrationDate: formatDateCell_(row[MIGRATION_COL.migrationDate - 1]),
+      plannedDate: formatDateCell_(row[MIGRATION_COL.plannedDate - 1]),
+      note: String(row[MIGRATION_COL.note - 1] || ''),
+    };
+  }
+  return jsonResponse({ ok: true, sheet: sheet.getName(), migrations: out });
+}
+
+// 単一行の upsert。既存の subscriberId があれば patch を当てる、無ければ末尾に追加。
+// リクエスト: { token, action: "upsertMigration", subscriberId, clientName, patch: { completed?, migrationDate?, plannedDate?, note? } }
+function handleUpsertMigration_(params) {
+  const subscriberId = String(params.subscriberId || '').trim();
+  if (!subscriberId) {
+    return jsonResponse({ error: 'subscriberId is required' });
+  }
+  const patch = params.patch || {};
+  const clientName = String(params.clientName || '').trim();
+
+  const sheet = getOrCreateMigrationSheet_();
+  const lastRow = sheet.getLastRow();
+
+  // 既存行を線形探索。件数が数百なので十分。
+  var rowIndex = -1;
+  if (lastRow >= 2) {
+    var sidRange = sheet
+      .getRange(2, MIGRATION_COL.subscriberId, lastRow - 1, 1)
+      .getValues();
+    for (var i = 0; i < sidRange.length; i++) {
+      if (String(sidRange[i][0] || '').trim() === subscriberId) {
+        rowIndex = i + 2;
+        break;
+      }
+    }
+  }
+
+  if (rowIndex < 0) {
+    // 末尾に新規行を追加。デフォルト値を入れておく。
+    rowIndex = Math.max(lastRow, 1) + 1;
+    sheet
+      .getRange(rowIndex, 1, 1, MIGRATION_HEADER.length)
+      .setValues([[subscriberId, clientName, false, '', '', '']]);
+    // 追加行の C 列にチェックボックスを敷く。
+    sheet
+      .getRange(rowIndex, MIGRATION_COL.completed)
+      .insertCheckboxes();
+  } else if (clientName) {
+    // clientName が変わった時のために B 列だけ最新化する。
+    sheet.getRange(rowIndex, MIGRATION_COL.clientName).setValue(clientName);
+  }
+
+  if (patch.hasOwnProperty('completed')) {
+    sheet
+      .getRange(rowIndex, MIGRATION_COL.completed)
+      .setValue(!!patch.completed);
+  }
+  if (patch.hasOwnProperty('migrationDate')) {
+    sheet
+      .getRange(rowIndex, MIGRATION_COL.migrationDate)
+      .setValue(patch.migrationDate == null ? '' : String(patch.migrationDate));
+  }
+  if (patch.hasOwnProperty('plannedDate')) {
+    sheet
+      .getRange(rowIndex, MIGRATION_COL.plannedDate)
+      .setValue(patch.plannedDate == null ? '' : String(patch.plannedDate));
+  }
+  if (patch.hasOwnProperty('note')) {
+    sheet
+      .getRange(rowIndex, MIGRATION_COL.note)
+      .setValue(patch.note == null ? '' : String(patch.note));
+  }
+  return jsonResponse({
+    ok: true,
+    sheet: sheet.getName(),
+    rowIndex: rowIndex,
+  });
+}
+
+// 日付セルは Date 型で入っている場合と文字列の場合があるので、
+// yyyy-MM-dd の文字列に正規化する。空欄は空文字。
+function formatDateCell_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(v).trim();
 }
 
 // 書き込み許可する列。UI が触るドロップダウン/テキスト入力および Meta 同期で
@@ -152,6 +314,9 @@ function doPost(e) {
   }
   if (params.action === 'updateCells') {
     return handleUpdateCells_(params);
+  }
+  if (params.action === 'upsertMigration') {
+    return handleUpsertMigration_(params);
   }
   return jsonResponse({ error: 'unknown action: ' + params.action });
 }

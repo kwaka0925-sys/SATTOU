@@ -221,6 +221,48 @@ function isConfigured(): boolean {
   return isBackendConfigured("stores");
 }
 
+// 新システム移行タブの 1 レコード。subscriberId を主キーに sattou 全ユーザー共有。
+export type MigrationStatusRecord = {
+  clientName: string;
+  completed: boolean;
+  migrationDate: string;
+  plannedDate: string;
+  note: string;
+};
+
+// 全ユーザー共有の「新システム移行」タブを読み込む。
+// 返り値: { [subscriberId]: MigrationStatusRecord }
+// GAS 側でタブが無ければ自動作成されるので、初回でも空マップが返る。
+export async function fetchMigrationStatuses(): Promise<
+  Record<string, MigrationStatusRecord>
+> {
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return {};
+
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
+  url.searchParams.set("action", "migrations");
+
+  try {
+    const res = await fetch(url.toString(), {
+      // 他ユーザーの更新を確実に取り込むため、キャッシュはタグ経由で無効化。
+      // 更新 API 側で revalidateTag("migrations-sheet") を呼ぶことで
+      // 次回リクエストは必ず GAS を叩き直す。
+      next: { revalidate: 30, tags: ["migrations-sheet"] },
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as {
+      migrations?: Record<string, MigrationStatusRecord>;
+      error?: string;
+    };
+    if (data.error) return {};
+    return data.migrations ?? {};
+  } catch (err) {
+    console.warn("[sheets] migrations fetch failed", err);
+    return {};
+  }
+}
+
 export type InvoicesFetchResult = {
   rows: SheetInvoice[];
   sheetName?: string;

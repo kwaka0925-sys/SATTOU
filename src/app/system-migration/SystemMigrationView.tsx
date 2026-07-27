@@ -1,30 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import MonthPicker from "@/components/MonthPicker";
 import {
   AlertTriangle,
-  ArrowRightLeft,
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
   Filter,
+  RefreshCw,
   Search,
 } from "lucide-react";
 import { num } from "@/lib/format";
-import type { SheetInvoice } from "@/lib/sheets";
+import type {
+  MigrationStatusRecord,
+  SheetInvoice,
+} from "@/lib/sheets";
 
-const STORAGE_KEY = "sattou-system-migration";
+// 旧 localStorage キー (clientName → MigrationStatus)。
+// シート化後は sheet 側が真実の値だが、既存ユーザーがブラウザに持っている
+// ローカルデータを 1 度だけシートに送り込むために使う。
+const LEGACY_STORAGE_KEY = "sattou-system-migration";
+// このバージョンのマイグレーションを実行済みか記録するフラグ。
+const LEGACY_MIGRATED_FLAG = "sattou-system-migration-uploaded-v1";
 
 type MigrationStatus = {
   completed: boolean;
-  migrationDate: string; // YYYY-MM-DD (実施日)
-  plannedDate: string; // YYYY-MM-DD (予定日)
-  note: string; // 自由記入メモ
+  migrationDate: string; // YYYY-MM-DD
+  plannedDate: string; // YYYY-MM-DD
+  note: string;
 };
 
-type MigrationMap = Record<string, MigrationStatus>;
+type MigrationMap = Record<string, MigrationStatus>; // key = subscriberId
 
 type Props = {
   rows: SheetInvoice[];
@@ -33,13 +42,21 @@ type Props = {
   sheetName?: string;
   expectedSheets?: string[];
   sheetMatched?: boolean;
+  initialMigrations: Record<string, MigrationStatusRecord>;
 };
 
 type StatusFilter = "all" | "completed" | "blank";
 
-// テーブルの並べ替え対象と方向。null は元の (識別番号) 順。
+// 並び替え対象と方向。null は元順 (シート順)。
 type SortKey = "migrationDate" | "plannedDate";
 type SortDir = "asc" | "desc";
+
+// 書き込み状況の表示ステータス。
+type SyncBadge =
+  | { kind: "idle" }
+  | { kind: "saving"; count: number }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string };
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-");
@@ -53,16 +70,51 @@ function monthTitle(month: string): string {
   return `${y}年${mNum}月分（${opMonth}月稼働分）`;
 }
 
-// クライアントの status を取り出す (存在しなければ既定値)
-// 旧レコードには note が無い場合があるので空文字にフォールバック。
-function getStatus(map: MigrationMap, key: string): MigrationStatus {
-  const stored = map[key];
+// GAS の migrations レスポンス (subscriberId → record) を、
+// この画面が持つ MigrationMap (同じ形) に変換。
+function fromInitial(
+  initial: Record<string, MigrationStatusRecord>,
+): MigrationMap {
+  const out: MigrationMap = {};
+  for (const [sid, r] of Object.entries(initial)) {
+    out[sid] = {
+      completed: !!r.completed,
+      migrationDate: r.migrationDate ?? "",
+      plannedDate: r.plannedDate ?? "",
+      note: r.note ?? "",
+    };
+  }
+  return out;
+}
+
+function getStatus(map: MigrationMap, subscriberId: string): MigrationStatus {
+  const stored = map[subscriberId];
   return {
     completed: stored?.completed ?? false,
     migrationDate: stored?.migrationDate ?? "",
     plannedDate: stored?.plannedDate ?? "",
     note: stored?.note ?? "",
   };
+}
+
+// サーバー側 API に patch を送る。成功したら true。
+async function postPatch(
+  subscriberId: string,
+  clientName: string,
+  patch: Partial<MigrationStatus>,
+): Promise<boolean> {
+  try {
+    const res = await fetch("/api/system-migration/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscriberId, clientName, patch }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return !!data.ok;
+  } catch {
+    return false;
+  }
 }
 
 export default function SystemMigrationView({
@@ -72,113 +124,189 @@ export default function SystemMigrationView({
   sheetName,
   expectedSheets,
   sheetMatched,
+  initialMigrations,
 }: Props) {
-  const [migrations, setMigrations] = useState<MigrationMap>({});
+  const router = useRouter();
+
+  // 現在描画中の migrations。SSR で来た initialMigrations を初期値に、
+  // ユーザー編集で楽観的に更新する。
+  const [migrations, setMigrations] = useState<MigrationMap>(() =>
+    fromInitial(initialMigrations),
+  );
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  // 並び替えの現在状態。sortKey=null なら元の順 (シート順) をキープ。
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [syncBadge, setSyncBadge] = useState<SyncBadge>({ kind: "idle" });
+  const [refreshing, setRefreshing] = useState(false);
 
+  // メモ入力のデバウンス。subscriberId ごとに 500ms 遅延で書き込みたいので、
+  // タイマー ID を id ごとに保持しておく。
+  const noteTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+
+  // 進行中の書き込みカウント。0 になった時に saved 表示に切り替える。
+  const inFlightRef = useRef(0);
+
+  // サーバー側の initialMigrations が変わった (別ユーザーの編集を再フェッチした等)
+  // 時に、ローカル state を上書きして反映する。編集中のセルに影響を与えるが、
+  // 「他人の値で上書き」は原則許容 (last write wins)。
   useEffect(() => {
+    setMigrations(fromInitial(initialMigrations));
+  }, [initialMigrations]);
+
+  // 旧 localStorage データを 1 度だけシートに送り込むマイグレーション。
+  // clientName → subscriberId の紐付けは rows から引く。
+  // シート側に既に値がある行 (initialMigrations に載っている) は上書きせず尊重。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(LEGACY_MIGRATED_FLAG)) return;
+    let stored: Record<string, MigrationStatus> | null = null;
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === "object") {
-          setMigrations(parsed);
-        }
+      const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") stored = parsed;
       }
     } catch {
       // ignore
     }
-  }, []);
-
-  const persist = useCallback((next: MigrationMap) => {
-    setMigrations(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore quota
+    if (!stored) {
+      window.localStorage.setItem(LEGACY_MIGRATED_FLAG, "1");
+      return;
     }
-  }, []);
 
-  const toggleCompleted = useCallback(
-    (clientName: string) => {
-      setMigrations((prev) => {
-        const current = getStatus(prev, clientName);
-        const next = {
-          ...prev,
-          [clientName]: { ...current, completed: !current.completed },
-        };
-        try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
-    },
-    [],
-  );
+    // clientName → subscriberId マップ (現在の rows から)
+    const nameToSid: Record<string, string> = {};
+    for (const r of rows) {
+      const sid = (r.subscriberId ?? "").trim();
+      if (!sid) continue;
+      const name = (r.clientName ?? "").trim();
+      if (name && !nameToSid[name]) nameToSid[name] = sid;
+    }
 
-  const setDate = useCallback(
-    (clientName: string, date: string) => {
-      setMigrations((prev) => {
-        const current = getStatus(prev, clientName);
-        const next = {
-          ...prev,
-          [clientName]: { ...current, migrationDate: date },
-        };
-        try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const setPlannedDate = useCallback(
-    (clientName: string, date: string) => {
-      setMigrations((prev) => {
-        const current = getStatus(prev, clientName);
-        const next = {
-          ...prev,
-          [clientName]: { ...current, plannedDate: date },
-        };
-        try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const setNote = useCallback((clientName: string, note: string) => {
-    setMigrations((prev) => {
-      const current = getStatus(prev, clientName);
-      const next = {
-        ...prev,
-        [clientName]: { ...current, note },
+    const uploads: Array<Promise<boolean>> = [];
+    for (const [clientName, s] of Object.entries(stored)) {
+      const sid = nameToSid[clientName];
+      if (!sid) continue;
+      // シート側に既に何か入っている行は触らない (他ユーザーが先に書き込んでいる可能性)。
+      if (initialMigrations[sid]) continue;
+      const patch: Partial<MigrationStatus> = {
+        completed: !!s.completed,
+        migrationDate: s.migrationDate ?? "",
+        plannedDate: s.plannedDate ?? "",
+        note: s.note ?? "",
       };
+      // 全部空なら送らない
+      const anyValue =
+        patch.completed || patch.migrationDate || patch.plannedDate || patch.note;
+      if (!anyValue) continue;
+      uploads.push(postPatch(sid, clientName, patch));
+    }
+
+    if (uploads.length === 0) {
+      window.localStorage.setItem(LEGACY_MIGRATED_FLAG, "1");
+      return;
+    }
+
+    setSyncBadge({ kind: "saving", count: uploads.length });
+    Promise.all(uploads).then(() => {
+      window.localStorage.setItem(LEGACY_MIGRATED_FLAG, "1");
+      setSyncBadge({ kind: "saved", at: Date.now() });
+      // 送信結果をシートから引き直し、共通ビューに揃える。
+      router.refresh();
+    });
+  }, [rows, initialMigrations, router]);
+
+  // タブがフォアグラウンドに戻った時に、他ユーザーの編集を取り込む。
+  useEffect(() => {
+    const onFocus = async () => {
       try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        await fetch("/api/system-migration/revalidate", { method: "POST" });
       } catch {
         // ignore
       }
-      return next;
-    });
-  }, []);
+      router.refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [router]);
+
+  // 楽観的更新 + サーバー送信。共通ロジック。
+  const applyPatch = useCallback(
+    (subscriberId: string, clientName: string, patch: Partial<MigrationStatus>) => {
+      setMigrations((prev) => {
+        const current = getStatus(prev, subscriberId);
+        return { ...prev, [subscriberId]: { ...current, ...patch } };
+      });
+      inFlightRef.current += 1;
+      setSyncBadge({ kind: "saving", count: inFlightRef.current });
+      postPatch(subscriberId, clientName, patch).then((ok) => {
+        inFlightRef.current = Math.max(0, inFlightRef.current - 1);
+        if (!ok) {
+          setSyncBadge({
+            kind: "error",
+            message: "シートへの保存に失敗しました。時間をおいて再試行してください。",
+          });
+          return;
+        }
+        if (inFlightRef.current === 0) {
+          setSyncBadge({ kind: "saved", at: Date.now() });
+        } else {
+          setSyncBadge({ kind: "saving", count: inFlightRef.current });
+        }
+      });
+    },
+    [],
+  );
+
+  const toggleCompleted = useCallback(
+    (subscriberId: string, clientName: string) => {
+      setMigrations((prev) => {
+        const current = getStatus(prev, subscriberId);
+        applyPatch(subscriberId, clientName, { completed: !current.completed });
+        return prev;
+      });
+    },
+    [applyPatch],
+  );
+
+  const setDate = useCallback(
+    (subscriberId: string, clientName: string, date: string) => {
+      applyPatch(subscriberId, clientName, { migrationDate: date });
+    },
+    [applyPatch],
+  );
+
+  const setPlannedDate = useCallback(
+    (subscriberId: string, clientName: string, date: string) => {
+      applyPatch(subscriberId, clientName, { plannedDate: date });
+    },
+    [applyPatch],
+  );
+
+  // メモは打鍵ごとの POST を避けるため 500ms デバウンス。
+  const setNote = useCallback(
+    (subscriberId: string, clientName: string, note: string) => {
+      // まずローカルは即時更新して、入力体感を損なわない。
+      setMigrations((prev) => {
+        const current = getStatus(prev, subscriberId);
+        return { ...prev, [subscriberId]: { ...current, note } };
+      });
+      const timers = noteTimersRef.current;
+      if (timers[subscriberId]) clearTimeout(timers[subscriberId]);
+      timers[subscriberId] = setTimeout(() => {
+        applyPatch(subscriberId, clientName, { note });
+      }, 500);
+    },
+    [applyPatch],
+  );
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      const status = getStatus(migrations, r.clientName);
+      const sid = (r.subscriberId ?? "").trim();
+      const status = getStatus(migrations, sid);
       if (statusFilter === "completed" && !status.completed) return false;
       if (statusFilter === "blank" && status.completed) return false;
       if (q) {
@@ -190,15 +318,14 @@ export default function SystemMigrationView({
     });
   }, [rows, migrations, statusFilter, q]);
 
-  // 並び替えを適用。sortKey が null なら filtered をそのまま返す。
-  // YYYY-MM-DD は文字列比較で日付順になるので localeCompare で十分。
-  // 日付未入力の行は常に最下部に置いて表示を安定させる。
   const sortedFiltered = useMemo(() => {
     if (!sortKey) return filtered;
     const dirMul = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      const av = getStatus(migrations, a.clientName)[sortKey];
-      const bv = getStatus(migrations, b.clientName)[sortKey];
+      const asid = (a.subscriberId ?? "").trim();
+      const bsid = (b.subscriberId ?? "").trim();
+      const av = getStatus(migrations, asid)[sortKey];
+      const bv = getStatus(migrations, bsid)[sortKey];
       if (!av && !bv) return 0;
       if (!av) return 1;
       if (!bv) return -1;
@@ -206,7 +333,6 @@ export default function SystemMigrationView({
     });
   }, [filtered, migrations, sortKey, sortDir]);
 
-  // 列ヘッダクリックで昇順→降順→解除 を巡回する共通ハンドラ。
   const toggleSort = useCallback(
     (key: SortKey) => {
       if (sortKey !== key) {
@@ -226,7 +352,8 @@ export default function SystemMigrationView({
     let completed = 0;
     let blank = 0;
     for (const r of rows) {
-      const s = getStatus(migrations, r.clientName);
+      const sid = (r.subscriberId ?? "").trim();
+      const s = getStatus(migrations, sid);
       if (s.completed) completed++;
       else blank++;
     }
@@ -238,6 +365,18 @@ export default function SystemMigrationView({
     };
   }, [rows, migrations]);
 
+  const doRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetch("/api/system-migration/revalidate", { method: "POST" });
+    } catch {
+      // ignore
+    }
+    router.refresh();
+    // Next の refresh は同期的に「完了」を通知しないので短めのタイマで戻す。
+    setTimeout(() => setRefreshing(false), 800);
+  }, [router]);
+
   return (
     <div className="h-screen flex flex-col">
       <TopBar
@@ -245,9 +384,25 @@ export default function SystemMigrationView({
         subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${sortedFiltered.length} 社`}
       />
       <div className="shrink-0 p-6 pb-4 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-slate-500">月表示</div>
-          <MonthPicker current={month} />
+          <div className="flex items-center gap-3">
+            {/* 保存状態のバッジ。共有シートに書き戻し中/完了/エラーを表示。 */}
+            <SyncStatus badge={syncBadge} />
+            <button
+              type="button"
+              onClick={doRefresh}
+              disabled={refreshing}
+              className="btn-ghost text-xs inline-flex items-center gap-1"
+              title="他ユーザーの編集を取り込む"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
+              />
+              シート更新
+            </button>
+            <MonthPicker current={month} />
+          </div>
         </div>
 
         {!configured && (
@@ -417,7 +572,10 @@ export default function SystemMigrationView({
                   </tr>
                 )}
                 {sortedFiltered.map((r) => {
-                  const status = getStatus(migrations, r.clientName);
+                  const sid = (r.subscriberId ?? "").trim();
+                  const status = getStatus(migrations, sid);
+                  // 加入者識別番号が無い行は共有できないので、UI 上グレーアウトする。
+                  const shareable = !!sid;
                   return (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 sticky left-0 bg-white z-10 font-medium truncate max-w-[240px]">
@@ -437,8 +595,11 @@ export default function SystemMigrationView({
                           <input
                             type="checkbox"
                             checked={status.completed}
-                            onChange={() => toggleCompleted(r.clientName)}
-                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            disabled={!shareable}
+                            onChange={() =>
+                              toggleCompleted(sid, r.clientName)
+                            }
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40"
                           />
                           <span
                             className={`pill ${
@@ -455,27 +616,36 @@ export default function SystemMigrationView({
                         <input
                           type="date"
                           value={status.migrationDate}
-                          onChange={(e) => setDate(r.clientName, e.target.value)}
-                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                          disabled={!shareable}
+                          onChange={(e) =>
+                            setDate(sid, r.clientName, e.target.value)
+                          }
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-40"
                         />
                       </td>
                       <td className="px-4 py-3">
                         <input
                           type="date"
                           value={status.plannedDate}
+                          disabled={!shareable}
                           onChange={(e) =>
-                            setPlannedDate(r.clientName, e.target.value)
+                            setPlannedDate(sid, r.clientName, e.target.value)
                           }
-                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                          className="text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-40"
                         />
                       </td>
                       <td className="px-4 py-3">
                         <input
                           type="text"
                           value={status.note}
-                          onChange={(e) => setNote(r.clientName, e.target.value)}
-                          placeholder="メモを入力"
-                          className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                          disabled={!shareable}
+                          onChange={(e) =>
+                            setNote(sid, r.clientName, e.target.value)
+                          }
+                          placeholder={
+                            shareable ? "メモを入力" : "識別番号未設定"
+                          }
+                          className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-40"
                         />
                       </td>
                     </tr>
@@ -487,5 +657,30 @@ export default function SystemMigrationView({
         </div>
       </div>
     </div>
+  );
+}
+
+function SyncStatus({ badge }: { badge: SyncBadge }) {
+  if (badge.kind === "idle") return null;
+  if (badge.kind === "saving") {
+    return (
+      <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+        <RefreshCw className="w-3 h-3 animate-spin" />
+        シートに保存中... ({badge.count})
+      </span>
+    );
+  }
+  if (badge.kind === "saved") {
+    return (
+      <span className="text-xs text-emerald-700 inline-flex items-center gap-1">
+        ✓ 保存済み (共有シート)
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-rose-700 inline-flex items-center gap-1">
+      <AlertTriangle className="w-3 h-3" />
+      {badge.message}
+    </span>
   );
 }
