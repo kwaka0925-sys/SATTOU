@@ -22,10 +22,20 @@ export default async function SystemMigrationPage({
     fetchInvoicesFromSheetWithMeta(month),
     fetchMigrationStatuses(),
   ]);
+  // 契約状況 (P 列) が「マーケのみ」または「解約」を含むクライアントは
+  // システム移行の対象外なので、一覧・タイル集計・進捗率すべてから除外する。
+  // マーケのみ: システムは使わずマーケ運用だけ受託しているクライアント
+  // 解約     : 既に契約が切れているクライアント
+  const rows = result.rows.filter((r) => {
+    const status = (r.subscriptionStatus ?? "").trim();
+    if (status === "マーケのみ") return false;
+    if (status.includes("解約")) return false;
+    return true;
+  });
   const configured = isBackendConfigured("billing");
   return (
     <SystemMigrationView
-      rows={result.rows}
+      rows={rows}
       month={month}
       configured={configured}
       sheetName={result.sheetName}
