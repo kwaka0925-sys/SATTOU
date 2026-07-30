@@ -263,6 +263,47 @@ export async function fetchMigrationStatuses(): Promise<
   }
 }
 
+// 「解約追加」タブの 1 行。手動入力の解約 (ブランド内 1 店舗だけの解約など)。
+export type ManualCancellation = {
+  id: string; // uuid、主キー
+  month: string; // YYYY-MM (解約月)
+  salonName: string;
+  storeName: string;
+  subscriberId: string;
+  payeeName: string;
+  marketer: string;
+  note: string;
+};
+
+// 全ユーザー共有の「解約追加」タブを読み込む。
+// GAS 側でタブが無ければ自動作成されるので、初回でも空配列が返る。
+export async function fetchManualCancellations(): Promise<
+  ManualCancellation[]
+> {
+  const cfg = backendConfig("billing");
+  if (!cfg.url || !cfg.token) return [];
+
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
+  url.searchParams.set("action", "manualCancellations");
+
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 30, tags: ["cancellations-manual"] },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      cancellations?: ManualCancellation[];
+      error?: string;
+    };
+    if (data.error) return [];
+    return data.cancellations ?? [];
+  } catch (err) {
+    console.warn("[sheets] manual cancellations fetch failed", err);
+    return [];
+  }
+}
+
 export type InvoicesFetchResult = {
   rows: SheetInvoice[];
   sheetName?: string;

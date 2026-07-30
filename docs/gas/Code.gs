@@ -105,6 +105,10 @@ function doGet(e) {
   if (params.action === 'migrations') {
     return handleGetMigrations_();
   }
+  // action=manualCancellations: 「解約追加」タブ全件を返す。
+  if (params.action === 'manualCancellations') {
+    return handleGetManualCancellations_();
+  }
 
   const month = params.month || currentMonth_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -301,6 +305,190 @@ function formatDateCell_(v) {
   return String(v).trim();
 }
 
+// -------------------------------------------------------------------
+// 解約追加タブ (手動入力の解約データ)
+//
+// ブランド内の 1 店舗だけが解約するようなケースは、月別請求書シートの
+// P 列だけでは表現できないため、独立したタブで id → 解約情報を管理する。
+// 全ユーザーが sattou の /cancellations 画面から追加/編集/削除できる。
+// 列:
+//   A: ID (uuid、主キー)
+//   B: 解約月 (yyyy-MM)
+//   C: サロン名
+//   D: 店舗名
+//   E: 加入者識別番号 (任意)
+//   F: 振込名 (任意)
+//   G: 担当 (任意)
+//   H: メモ (任意)
+// -------------------------------------------------------------------
+
+const MANUAL_CANCEL_SHEET_NAME = '解約追加';
+const MANUAL_CANCEL_HEADER = [
+  'ID',
+  '解約月',
+  'サロン名',
+  '店舗名',
+  '加入者識別番号',
+  '振込名',
+  '担当',
+  'メモ',
+];
+const MANUAL_CANCEL_COL = {
+  id: 1,
+  month: 2,
+  salonName: 3,
+  storeName: 4,
+  subscriberId: 5,
+  payeeName: 6,
+  marketer: 7,
+  note: 8,
+};
+
+function getOrCreateManualCancelSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(MANUAL_CANCEL_SHEET_NAME);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(MANUAL_CANCEL_SHEET_NAME);
+  sheet
+    .getRange(1, 1, 1, MANUAL_CANCEL_HEADER.length)
+    .setValues([MANUAL_CANCEL_HEADER])
+    .setFontWeight('bold')
+    .setBackground('#f1f5f9');
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+// A 列 (ID) を走査して { matchRow, lastDataRow } を返す共通処理。
+function scanManualCancelColA_(sheet, targetId) {
+  const maxRows = sheet.getMaxRows();
+  var matchRow = -1;
+  var lastDataRow = 1;
+  if (maxRows >= 2) {
+    const colA = sheet.getRange(2, 1, maxRows - 1, 1).getValues();
+    for (var i = 0; i < colA.length; i++) {
+      var v = String(colA[i][0] || '').trim();
+      if (!v) continue;
+      if (i + 2 > lastDataRow) lastDataRow = i + 2;
+      if (matchRow < 0 && targetId && v === targetId) matchRow = i + 2;
+    }
+  }
+  return { matchRow: matchRow, lastDataRow: lastDataRow };
+}
+
+function handleGetManualCancellations_() {
+  const sheet = getOrCreateManualCancelSheet_();
+  const maxRows = sheet.getMaxRows();
+  const list = [];
+  if (maxRows >= 2) {
+    const range = sheet
+      .getRange(2, 1, maxRows - 1, MANUAL_CANCEL_HEADER.length)
+      .getValues();
+    for (var i = 0; i < range.length; i++) {
+      var row = range[i];
+      var id = String(row[MANUAL_CANCEL_COL.id - 1] || '').trim();
+      if (!id) continue;
+      list.push({
+        id: id,
+        month: String(row[MANUAL_CANCEL_COL.month - 1] || '').trim(),
+        salonName: String(row[MANUAL_CANCEL_COL.salonName - 1] || '').trim(),
+        storeName: String(row[MANUAL_CANCEL_COL.storeName - 1] || '').trim(),
+        subscriberId: String(row[MANUAL_CANCEL_COL.subscriberId - 1] || '').trim(),
+        payeeName: String(row[MANUAL_CANCEL_COL.payeeName - 1] || '').trim(),
+        marketer: String(row[MANUAL_CANCEL_COL.marketer - 1] || '').trim(),
+        note: String(row[MANUAL_CANCEL_COL.note - 1] || ''),
+      });
+    }
+  }
+  return jsonResponse({ ok: true, cancellations: list });
+}
+
+function handleAddManualCancellation_(params) {
+  const data = params.data || {};
+  const id = String(params.id || '').trim() || Utilities.getUuid();
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ error: 'sheet is busy, retry shortly' });
+  }
+  try {
+    const sheet = getOrCreateManualCancelSheet_();
+    const scan = scanManualCancelColA_(sheet, null);
+    const rowIndex = scan.lastDataRow + 1;
+    sheet
+      .getRange(rowIndex, 1, 1, MANUAL_CANCEL_HEADER.length)
+      .setValues([[
+        id,
+        String(data.month || '').trim(),
+        String(data.salonName || '').trim(),
+        String(data.storeName || '').trim(),
+        String(data.subscriberId || '').trim(),
+        String(data.payeeName || '').trim(),
+        String(data.marketer || '').trim(),
+        String(data.note || ''),
+      ]]);
+    return jsonResponse({ ok: true, id: id, rowIndex: rowIndex });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleUpdateManualCancellation_(params) {
+  const id = String(params.id || '').trim();
+  if (!id) return jsonResponse({ error: 'id is required' });
+  const patch = params.patch || {};
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ error: 'sheet is busy, retry shortly' });
+  }
+  try {
+    const sheet = getOrCreateManualCancelSheet_();
+    const scan = scanManualCancelColA_(sheet, id);
+    if (scan.matchRow < 0) {
+      return jsonResponse({ error: 'id not found: ' + id });
+    }
+    const fields = ['month', 'salonName', 'storeName', 'subscriberId', 'payeeName', 'marketer', 'note'];
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (patch.hasOwnProperty(f)) {
+        sheet.getRange(scan.matchRow, MANUAL_CANCEL_COL[f]).setValue(
+          patch[f] == null ? '' : String(patch[f]),
+        );
+      }
+    }
+    return jsonResponse({ ok: true, rowIndex: scan.matchRow });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleDeleteManualCancellation_(params) {
+  const id = String(params.id || '').trim();
+  if (!id) return jsonResponse({ error: 'id is required' });
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ error: 'sheet is busy, retry shortly' });
+  }
+  try {
+    const sheet = getOrCreateManualCancelSheet_();
+    const scan = scanManualCancelColA_(sheet, id);
+    if (scan.matchRow < 0) {
+      return jsonResponse({ error: 'id not found: ' + id });
+    }
+    sheet.deleteRow(scan.matchRow);
+    return jsonResponse({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 書き込み許可する列。UI が触るドロップダウン/テキスト入力および Meta 同期で
 // 上書きする広告費列を対象にする。金額 (G) や運用代行費 (U/V) など集計計算式が
 // 入っている可能性のある列は誤書き込み防止のため除外。
@@ -338,6 +526,15 @@ function doPost(e) {
   }
   if (params.action === 'upsertMigration') {
     return handleUpsertMigration_(params);
+  }
+  if (params.action === 'addManualCancellation') {
+    return handleAddManualCancellation_(params);
+  }
+  if (params.action === 'updateManualCancellation') {
+    return handleUpdateManualCancellation_(params);
+  }
+  if (params.action === 'deleteManualCancellation') {
+    return handleDeleteManualCancellation_(params);
   }
   return jsonResponse({ error: 'unknown action: ' + params.action });
 }
