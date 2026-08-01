@@ -111,7 +111,23 @@ function loadSyncCache(): SyncCache {
     const raw = window.localStorage.getItem(SYNC_CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    // キャッシュエントリーが古い or 破損している場合に results 等の必須フィールドが
+    // 欠けているケースがあり、そのまま渡すと activeSuccess.results.forEach 等で
+    // 落ちる。ここで shape 検証し、不正なエントリーは捨てる。
+    const clean: SyncCache = {};
+    for (const [month, entry] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!entry || typeof entry !== "object") continue;
+      const e = entry as Partial<SyncSuccess>;
+      if (
+        e.status === "success" &&
+        Array.isArray(e.results) &&
+        typeof e.syncedAt === "string"
+      ) {
+        clean[month] = e as SyncSuccess;
+      }
+    }
+    return clean;
   } catch {
     return {};
   }
@@ -166,8 +182,12 @@ export default function AdsView({
 
   const syncMap = useMemo(() => {
     if (!activeSuccess) return new Map<string, number>();
+    // results が配列でないキャッシュ (破損 or 旧形式) を踏んでも落ちないように防御。
+    const results = Array.isArray(activeSuccess.results)
+      ? activeSuccess.results
+      : [];
     const m = new Map<string, number>();
-    activeSuccess.results.forEach((r) => {
+    results.forEach((r) => {
       if (!r.error) m.set(r.clientKey, r.spend);
     });
     return m;
@@ -653,7 +673,10 @@ export default function AdsView({
                     {activeSuccess.errorCount} 社):
                   </div>
                   <ul className="space-y-0.5">
-                    {activeSuccess.results
+                    {(Array.isArray(activeSuccess.results)
+                      ? activeSuccess.results
+                      : []
+                    )
                       .filter((r) => r.error)
                       .map((r) => (
                         <li

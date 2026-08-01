@@ -72,11 +72,15 @@ function monthTitle(month: string): string {
 
 // GAS の migrations レスポンス (subscriberId → record) を、
 // この画面が持つ MigrationMap (同じ形) に変換。
+// GAS が想定外の shape を返した場合や initial が null/undefined の時にも
+// 落ちないように、防御的に空マップへフォールバック。
 function fromInitial(
-  initial: Record<string, MigrationStatusRecord>,
+  initial: Record<string, MigrationStatusRecord> | null | undefined,
 ): MigrationMap {
   const out: MigrationMap = {};
+  if (!initial || typeof initial !== "object") return out;
   for (const [sid, r] of Object.entries(initial)) {
+    if (!r || typeof r !== "object") continue;
     out[sid] = {
       completed: !!r.completed,
       migrationDate: r.migrationDate ?? "",
