@@ -163,9 +163,9 @@ export default function AdsView({
 }: Props) {
   const [q, setQ] = useState("");
   const [marketer, setMarketer] = useState<string>("all");
-  const defaultRange = useMemo(() => operatingMonthRange(month), [month]);
-  const [since, setSince] = useState(defaultRange.since);
-  const [until, setUntil] = useState(defaultRange.until);
+  // 同期期間は「表示月の稼働月」に固定 (例: 8月請求 → 7/1〜7/31)。
+  // 別月分まで書き戻して事故らないように、UI から編集不可にする。
+  const { since, until } = useMemo(() => operatingMonthRange(month), [month]);
   const [sync, setSync] = useState<SyncState>({ status: "idle" });
   const [writeback, setWriteback] = useState<WritebackState>({ status: "idle" });
   // 「N 社でエラー」チップを押した時に、詳細リストを展開表示するかのフラグ。
@@ -333,51 +333,6 @@ export default function AdsView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
-
-  const applyPreset = (
-    kind:
-      | "op-month"
-      | "this-month"
-      | "last-month"
-      | "last7"
-      | "last30",
-  ) => {
-    const today = new Date();
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    if (kind === "op-month") {
-      const r = operatingMonthRange(month);
-      setSince(r.since);
-      setUntil(r.until);
-    } else if (kind === "this-month") {
-      const y = today.getFullYear();
-      const m = today.getMonth() + 1;
-      const last = new Date(y, m, 0).getDate();
-      const mm = String(m).padStart(2, "0");
-      setSince(`${y}-${mm}-01`);
-      setUntil(`${y}-${mm}-${String(last).padStart(2, "0")}`);
-    } else if (kind === "last-month") {
-      // 今月の1日 → 1日前 = 先月末 という Date 数値化で
-      // 年またぎ（1月→12月）も自然に処理する
-      const firstOfThis = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastOfPrev = new Date(firstOfThis.getTime() - 24 * 60 * 60 * 1000);
-      const prevY = lastOfPrev.getFullYear();
-      const prevM = lastOfPrev.getMonth() + 1;
-      const mm = String(prevM).padStart(2, "0");
-      const last = new Date(prevY, prevM, 0).getDate();
-      setSince(`${prevY}-${mm}-01`);
-      setUntil(`${prevY}-${mm}-${String(last).padStart(2, "0")}`);
-    } else if (kind === "last7") {
-      const from = new Date(today);
-      from.setDate(from.getDate() - 6);
-      setSince(iso(from));
-      setUntil(iso(today));
-    } else if (kind === "last30") {
-      const from = new Date(today);
-      from.setDate(from.getDate() - 29);
-      setSince(iso(from));
-      setUntil(iso(today));
-    }
-  };
 
   const marketers = useMemo(() => {
     const set = new Set<string>();
@@ -552,70 +507,20 @@ export default function AdsView({
           />
         </div>
 
-        {/* Meta 広告費同期バー */}
+        {/* Meta 広告費同期バー
+            期間は表示月の稼働月に固定 (8月請求 → 7/1〜7/31)。
+            別月の値を誤って書き戻すのを防ぐため、UI から編集不可。 */}
         <div className="card p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <Zap className="w-4 h-4 text-brand-600" />
               Meta 広告費同期
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">開始</span>
-              <input
-                type="date"
-                value={since}
-                onChange={(e) => setSince(e.target.value)}
-                className="input text-xs w-auto"
-              />
-              <span className="text-xs text-slate-500">〜</span>
-              <input
-                type="date"
-                value={until}
-                onChange={(e) => setUntil(e.target.value)}
-                className="input text-xs w-auto"
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => applyPreset("op-month")}
-                className="text-[11px] text-brand-700 hover:underline px-1"
-                title="表示月の稼働月（前月1日〜末日）"
-              >
-                稼働月
-              </button>
-              <span className="text-slate-300">·</span>
-              <button
-                type="button"
-                onClick={() => applyPreset("this-month")}
-                className="text-[11px] text-brand-700 hover:underline px-1"
-              >
-                今月
-              </button>
-              <span className="text-slate-300">·</span>
-              <button
-                type="button"
-                onClick={() => applyPreset("last-month")}
-                className="text-[11px] text-brand-700 hover:underline px-1"
-              >
-                先月
-              </button>
-              <span className="text-slate-300">·</span>
-              <button
-                type="button"
-                onClick={() => applyPreset("last7")}
-                className="text-[11px] text-brand-700 hover:underline px-1"
-              >
-                過去7日
-              </button>
-              <span className="text-slate-300">·</span>
-              <button
-                type="button"
-                onClick={() => applyPreset("last30")}
-                className="text-[11px] text-brand-700 hover:underline px-1"
-              >
-                過去30日
-              </button>
+            <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-md px-3 py-1.5 tabular-nums">
+              <span className="text-slate-500">稼働月固定</span>
+              <span className="font-medium">
+                {since.replace(/-/g, "/")} 〜 {until.replace(/-/g, "/")}
+              </span>
             </div>
             <button
               type="button"
