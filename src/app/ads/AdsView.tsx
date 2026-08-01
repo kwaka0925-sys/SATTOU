@@ -890,7 +890,8 @@ export default function AdsView({
                       ? r.operationFeeIncTax / displaySpend
                       : null;
                   const syncedError =
-                    sync.status === "success"
+                    sync.status === "success" &&
+                    Array.isArray(sync.results)
                       ? sync.results.find((x) => x.clientKey === r.id)?.error
                       : undefined;
                   return (
