@@ -1,8 +1,6 @@
 import {
   fetchInvoicesForMonthStrict,
-  fetchManualCancellations,
   isBackendConfigured,
-  type ManualCancellation,
   type SheetInvoice,
 } from "@/lib/sheets";
 import CancellationsView from "./CancellationsView";
@@ -37,21 +35,18 @@ export default async function CancellationsPage() {
   const months = shiftedYearMonths(year);
   const configured = isBackendConfigured("billing");
 
-  // 請求書シート由来の月別解約 と、手動追加の解約 を並列取得。
-  const [monthlyRows, manualCancellations] = await Promise.all([
-    Promise.all(
-      months.map(async ({ displayMonth, sheetMonth }) => ({
-        month: displayMonth,
-        rows: await fetchInvoicesForMonthStrict(sheetMonth),
-      })),
-    ),
-    fetchManualCancellations(),
-  ]) as [MonthRows[], ManualCancellation[]];
+  // シートは +1 ヶ月のものを引き、返す month フィールドには表示月 (稼働月) を入れる。
+  // これにより CancellationsView 側は month をそのまま表示月として扱える。
+  const monthlyRows: MonthRows[] = await Promise.all(
+    months.map(async ({ displayMonth, sheetMonth }) => ({
+      month: displayMonth,
+      rows: await fetchInvoicesForMonthStrict(sheetMonth),
+    })),
+  );
 
   return (
     <CancellationsView
       monthlyRows={monthlyRows}
-      manualCancellations={manualCancellations}
       configured={configured}
       year={year}
     />
