@@ -230,6 +230,33 @@ export type MigrationStatusRecord = {
   note: string;
 };
 
+// 新システム移行の画面用に「最新のクライアント一覧」を取得。
+// 移行作業は月を跨いだ運用なので、月ごとに違う一覧が出ると使いづらい。
+// currentBillingMonth から順に遡って最初にクライアント行がある月のシートを使う。
+export async function fetchClientsForMigration(): Promise<InvoicesFetchResult & {
+  month: string;
+}> {
+  const months: string[] = [];
+  const d = new Date();
+  // currentBillingMonth (今月 + 1) から出発して最大 6 ヶ月遡る。
+  d.setMonth(d.getMonth() + 1);
+  for (let i = 0; i < 6; i++) {
+    months.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    );
+    d.setMonth(d.getMonth() - 1);
+  }
+  for (const m of months) {
+    const result = await fetchInvoicesFromSheetWithMeta(m);
+    if (result.rows.length > 0) {
+      return { ...result, month: m };
+    }
+  }
+  // 全て空 (=シート未整備) の場合は最新月を返してタブなし警告を出す。
+  const fallback = await fetchInvoicesFromSheetWithMeta(months[0]);
+  return { ...fallback, month: months[0] };
+}
+
 // 全ユーザー共有の「新システム移行」タブを読み込む。
 // 返り値: { [subscriberId]: MigrationStatusRecord }
 // GAS 側でタブが無ければ自動作成されるので、初回でも空マップが返る。

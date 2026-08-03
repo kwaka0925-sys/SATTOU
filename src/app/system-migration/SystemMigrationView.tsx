@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
-import MonthPicker from "@/components/MonthPicker";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -61,13 +60,6 @@ type SyncBadge =
 function monthLabel(month: string): string {
   const [y, m] = month.split("-");
   return `${y}年${parseInt(m, 10)}月`;
-}
-
-function monthTitle(month: string): string {
-  const [y, m] = month.split("-");
-  const mNum = parseInt(m, 10);
-  const opMonth = mNum === 1 ? 12 : mNum - 1;
-  return `${y}年${mNum}月分（${opMonth}月稼働分）`;
 }
 
 // GAS の migrations レスポンス (subscriberId → record) を、
@@ -385,28 +377,24 @@ export default function SystemMigrationView({
     <div className="h-screen flex flex-col">
       <TopBar
         title="新システム移行"
-        subtitle={`${monthTitle(month)} · 全 ${rows.length} 社 / 表示 ${sortedFiltered.length} 社`}
+        subtitle={`全 ${rows.length} 社 / 表示 ${sortedFiltered.length} 社 (最新クライアント一覧: ${monthLabel(month)}分)`}
       />
       <div className="shrink-0 p-6 pb-4 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm text-slate-500">月表示</div>
-          <div className="flex items-center gap-3">
-            {/* 保存状態のバッジ。共有シートに書き戻し中/完了/エラーを表示。 */}
-            <SyncStatus badge={syncBadge} />
-            <button
-              type="button"
-              onClick={doRefresh}
-              disabled={refreshing}
-              className="btn-ghost text-xs inline-flex items-center gap-1"
-              title="他ユーザーの編集を取り込む"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
-              />
-              シート更新
-            </button>
-            <MonthPicker current={month} />
-          </div>
+        <div className="flex items-center justify-end gap-3">
+          {/* 保存状態のバッジ。共有シートに書き戻し中/完了/エラーを表示。 */}
+          <SyncStatus badge={syncBadge} />
+          <button
+            type="button"
+            onClick={doRefresh}
+            disabled={refreshing}
+            className="btn-ghost text-xs inline-flex items-center gap-1"
+            title="他ユーザーの編集を取り込む"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
+            />
+            シート更新
+          </button>
         </div>
 
         {!configured && (
