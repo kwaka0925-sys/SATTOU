@@ -1,218 +1,229 @@
-import Link from "next/link";
 import {
   Coins,
-  CalendarCheck2,
-  TrendingUp,
-  Users,
-  ArrowUpRight,
-  AlertTriangle,
+  Store,
+  Building2,
+  Megaphone,
+  Landmark,
+  FileText,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import StatCard from "@/components/StatCard";
-import { CLIENTS, totalsAll, clientCpa, clientRoas } from "@/lib/mock";
-import { num, pct, ratio, yen } from "@/lib/format";
-import {
-  SpendBookingChart,
-  CpaTrendChart,
-} from "@/components/charts/SpendBookingChart";
+import MonthPicker from "@/components/MonthPicker";
+import ActivityTiles from "@/components/ActivityTiles";
+import { num, yen } from "@/lib/format";
+import { fetchDashboardTotals, currentBillingMonth } from "@/lib/sheets";
 
-export default function Page() {
-  const totals = totalsAll();
-  const activeClients = CLIENTS.filter((c) => c.status === "active").length;
+export const dynamic = "force-dynamic";
 
-  // Aggregate daily across all clients (sum)
-  const aggDaily = CLIENTS[0].daily.map((_, idx) => {
-    const day = CLIENTS.reduce(
-      (acc, c) => {
-        const d = c.daily[idx];
-        return {
-          date: d.date,
-          spend: acc.spend + d.spend,
-          bookings: acc.bookings + d.bookings,
-        };
-      },
-      { date: "", spend: 0, bookings: 0 },
-    );
-    return day;
-  });
+type SearchParams = { month?: string };
 
-  const cpaDaily = aggDaily.map((d) => ({
-    date: d.date,
-    cpa: d.bookings ? Math.round(d.spend / d.bookings) : 0,
-  }));
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-");
+  return `${y}年${parseInt(m, 10)}月`;
+}
 
-  // Top movers
-  const ranked = [...CLIENTS]
-    .filter((c) => c.metrics30d.bookings > 0)
-    .sort((a, b) => clientCpa(a) - clientCpa(b));
-  const topPerformers = ranked.slice(0, 5);
-  const needAttention = [...CLIENTS]
-    .filter((c) => c.status === "active")
-    .sort((a, b) => clientCpa(b) - clientCpa(a))
-    .slice(0, 5);
+function monthTitle(month: string): string {
+  const [y, m] = month.split("-");
+  const mNum = parseInt(m, 10);
+  const opMonth = mNum === 1 ? 12 : mNum - 1;
+  return `${y}年${mNum}月分（${opMonth}月稼働分）`;
+}
+
+function SectionHeading({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <div className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+        {title}
+      </div>
+      {subtitle && (
+        <div className="text-[11px] text-slate-400">{subtitle}</div>
+      )}
+    </div>
+  );
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const month = searchParams?.month ?? currentBillingMonth();
+  const sheetTotals = await fetchDashboardTotals(month);
+  const hasData = sheetTotals.configured && sheetTotals.customerCount > 0;
+
+  const revenueIncTax = sheetTotals.revenue;
+  const revenueExTax = Math.round(revenueIncTax / 1.1);
+  const opFeeIncTax = sheetTotals.operationFeeIncTax;
+  const opFeeExTax =
+    sheetTotals.operationFeeExTax > 0
+      ? sheetTotals.operationFeeExTax
+      : Math.round(opFeeIncTax / 1.1);
+  const systemRevenueIncTax = Math.max(revenueIncTax - opFeeIncTax, 0);
+  const systemRevenueExTax = Math.max(revenueExTax - opFeeExTax, 0);
+  const dataHint = hasData
+    ? `${monthLabel(month)}分 · 請求書シート集計`
+    : "実データ接続待ち";
+
+  const totalPay = sheetTotals.transferCount + sheetTotals.invoiceCount;
+  const transferRate =
+    totalPay > 0 ? Math.round((sheetTotals.transferCount / totalPay) * 100) : 0;
 
   return (
     <div>
       <TopBar
-        title="ダッシュボード"
-        subtitle="直近30日のグループ全体パフォーマンス（Meta広告 × SATTOU予約）"
+        title="SATTOU管理"
+        subtitle={`SATTOU 経営指標サマリー — ${monthTitle(month)}`}
       />
 
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard
-            label="総広告費"
-            value={yen(totals.spend)}
-            delta={4.8}
-            icon={<Coins className="w-4 h-4" />}
-            hint="前月比"
-          />
-          <StatCard
-            label="総予約数"
-            value={num(totals.bookings)}
-            delta={9.2}
-            icon={<CalendarCheck2 className="w-4 h-4" />}
-            hint="前月比"
-          />
-          <StatCard
-            label="平均CPA"
-            value={yen(totals.cpa)}
-            delta={-3.1}
-            icon={<TrendingUp className="w-4 h-4" />}
-            hint="前月比（低いほど良)"
-          />
-          <StatCard
-            label="ROAS"
-            value={ratio(totals.roas)}
-            delta={6.4}
-            icon={<TrendingUp className="w-4 h-4" />}
-            hint="売上 / 広告費"
-          />
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-500">月表示</div>
+          <MonthPicker current={month} />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="card p-5 xl:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-semibold">広告費 × 予約数 推移（30日）</h2>
-                <p className="text-xs text-slate-500 mt-0.5">全クライアント合算</p>
-              </div>
-              <div className="text-xs text-slate-500 flex items-center gap-3">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> 広告費</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> 予約数</span>
-              </div>
-            </div>
-            <SpendBookingChart data={aggDaily} />
+        {/* Section: 売上 (6 tiles, compact grid so tiles don't stretch horizontally) */}
+        <section className="space-y-3">
+          <SectionHeading title="売上" subtitle={monthLabel(month)} />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <StatCard
+              size="sm"
+              accent="primary"
+              label="総売上（税抜き）"
+              value={yen(revenueExTax)}
+              icon={<Coins className="w-4 h-4" />}
+              hint={hasData ? "税率10%仮定" : dataHint}
+            />
+            <StatCard
+              size="sm"
+              accent="primary"
+              label="総売上（税込み）"
+              value={yen(revenueIncTax)}
+              icon={<Coins className="w-4 h-4" />}
+              hint={hasData ? "請求書シート集計" : dataHint}
+            />
+            <StatCard
+              size="sm"
+              accent="brand"
+              label="システム売上（税抜き）"
+              value={yen(systemRevenueExTax)}
+              icon={<Coins className="w-4 h-4" />}
+              hint={hasData ? "総売上 − 広告運用代行費" : dataHint}
+            />
+            <StatCard
+              size="sm"
+              accent="brand"
+              label="システム売上（税込み）"
+              value={yen(systemRevenueIncTax)}
+              icon={<Coins className="w-4 h-4" />}
+              hint={hasData ? "総売上 − 広告運用代行費" : dataHint}
+            />
+            <StatCard
+              size="sm"
+              accent="warning"
+              label="広告運用代行費（税抜き）"
+              value={yen(opFeeExTax)}
+              icon={<Megaphone className="w-4 h-4" />}
+              hint={
+                hasData
+                  ? sheetTotals.operationFeeExTax > 0
+                    ? "税抜"
+                    : "税率10%仮定"
+                  : dataHint
+              }
+            />
+            <StatCard
+              size="sm"
+              accent="warning"
+              label="広告運用代行費（税込み）"
+              value={yen(opFeeIncTax)}
+              icon={<Megaphone className="w-4 h-4" />}
+              hint={hasData ? "税込" : dataHint}
+            />
           </div>
+        </section>
 
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-semibold">CPA推移</h2>
-                <p className="text-xs text-slate-500 mt-0.5">全体平均</p>
-              </div>
-            </div>
-            <CpaTrendChart data={cpaDaily} />
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              <div className="rounded-lg bg-slate-50 p-3">
-                <div className="text-xs text-slate-500">CTR</div>
-                <div className="font-semibold">{pct(totals.ctr)}</div>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-3">
-                <div className="text-xs text-slate-500">CVR (Click→予約)</div>
-                <div className="font-semibold">{pct(totals.cvr)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Section: 実績 — 入退会 + 請求書払い未入金の当月ステータス */}
+        <section className="space-y-3">
+          <SectionHeading
+            title="実績"
+            subtitle="当月の入退会 + 請求書払い未入金"
+          />
+          <ActivityTiles
+            month={month}
+            cancelledCountFromSheet={sheetTotals.cancelledCount}
+            unpaidCount={sheetTotals.unpaidCount}
+            unpaidAmount={sheetTotals.unpaidAmount}
+          />
+        </section>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-600" /> CPAが優秀なクライアントTOP5
-              </h2>
-              <Link href="/rankings" className="text-xs text-brand-700 inline-flex items-center gap-1">
-                全件 <ArrowUpRight className="w-3 h-3" />
-              </Link>
-            </div>
-            <ul className="divide-y divide-slate-100">
-              {topPerformers.map((c, i) => (
-                <li key={c.id} className="py-3 flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-semibold">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <Link href={`/clients/${c.id}`} className="font-medium hover:text-brand-700 truncate block">
-                      {c.name}
-                    </Link>
-                    <div className="text-xs text-slate-500">{c.industry} · {c.prefecture}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold">{yen(clientCpa(c))}</div>
-                    <div className="text-xs text-slate-500">予約 {c.metrics30d.bookings}件</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+        {/* Section: 導入指標 (4 tiles) */}
+        <section className="space-y-3">
+          <SectionHeading title="導入指標" subtitle={monthLabel(month)} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard
+              size="sm"
+              label="総ブランド数"
+              value={num(sheetTotals.brandCount)}
+              icon={<Store className="w-4 h-4" />}
+              hint={hasData ? "請求先合計" : dataHint}
+            />
+            <StatCard
+              size="sm"
+              label="店舗数"
+              value={num(sheetTotals.storeCount)}
+              icon={<Building2 className="w-4 h-4" />}
+              hint={hasData ? `請求先サロン ${num(sheetTotals.customerCount)} 社` : dataHint}
+            />
+            <StatCard
+              size="sm"
+              label="口座振替"
+              value={`${num(sheetTotals.transferCount)} 社`}
+              icon={<Landmark className="w-4 h-4" />}
+              hint={hasData ? `全体の ${transferRate}%` : dataHint}
+            />
+            <StatCard
+              size="sm"
+              label="請求書"
+              value={`${num(sheetTotals.invoiceCount)} 社`}
+              icon={<FileText className="w-4 h-4" />}
+              hint={
+                hasData
+                  ? sheetTotals.invoiceCount > 0
+                    ? `振替への移行対象`
+                    : `全て振替済み`
+                  : dataHint
+              }
+            />
           </div>
+        </section>
 
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600" /> 改善要のクライアント
-              </h2>
-              <span className="text-xs text-slate-500">CPAが高い順</span>
-            </div>
-            <ul className="divide-y divide-slate-100">
-              {needAttention.map((c) => (
-                <li key={c.id} className="py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <Link href={`/clients/${c.id}`} className="font-medium hover:text-brand-700 truncate block">
-                      {c.name}
-                    </Link>
-                    <div className="text-xs text-slate-500">
-                      広告費 {yen(c.metrics30d.spend)} · 予約 {c.metrics30d.bookings}件
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-rose-600">{yen(clientCpa(c))}</div>
-                    <div className="text-xs text-slate-500">ROAS {ratio(clientRoas(c))}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Users className="w-4 h-4" /> クライアントサマリー
-            </h2>
-            <div className="text-xs text-slate-500">
-              全 {CLIENTS.length} 社 / 稼働中 {activeClients} 社
+        {!sheetTotals.configured && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm px-5 py-4">
+            <div className="font-medium mb-1">実データを接続してください</div>
+            <div className="text-xs leading-relaxed">
+              このダッシュボードは請求書シート（Google Sheets + GAS Web App）から月次総計を取得します。
+              Vercel の Project Settings → Environment Variables に
+              <code className="font-mono"> SHEETS_GAS_URL_BILLING </code>
+              と
+              <code className="font-mono"> SHEETS_GAS_TOKEN_BILLING </code>
+              を登録すると、この画面の各指標が自動で反映されます。
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500">合計売上(推定)</div>
-              <div className="font-semibold mt-1">{yen(totals.revenue)}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500">来店確定数</div>
-              <div className="font-semibold mt-1">{num(totals.completedVisits)}件</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500">広告クリック</div>
-              <div className="font-semibold mt-1">{num(totals.clicks)}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500">インプレッション</div>
-              <div className="font-semibold mt-1">{num(totals.impressions)}</div>
+        )}
+        {sheetTotals.configured && !hasData && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-sm px-5 py-4">
+            <div className="font-medium mb-1">{monthLabel(month)}分のデータが見つかりませんでした</div>
+            <div className="text-xs">
+              シートのタブ名・トークン・列マッピングをご確認ください。上の月表示ピッカーで別の月に切替もできます。
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
