@@ -230,6 +230,39 @@ export type MigrationStatusRecord = {
   note: string;
 };
 
+// 直近 12 ヶ月分の請求書シートを横断的にスキャンして、
+// 過去に一度でも「解約」または「マーケのみ」表記が付いたことのある
+// 加入者識別番号の集合を返す。
+// /system-migration で「解約済みクライアントを除外する」目的で使う。
+export async function fetchCancelledSubscriberIds(): Promise<Set<string>> {
+  const cancelled = new Set<string>();
+  const months: string[] = [];
+  const d = new Date();
+  // currentBillingMonth (今月 + 1) から 12 ヶ月遡って月キーを組み立てる。
+  d.setMonth(d.getMonth() + 1);
+  for (let i = 0; i < 12; i++) {
+    months.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    );
+    d.setMonth(d.getMonth() - 1);
+  }
+
+  const results = await Promise.all(
+    months.map((m) => fetchInvoicesForMonthStrict(m)),
+  );
+  results.forEach((rows) => {
+    rows.forEach((r) => {
+      const sid = (r.subscriberId ?? "").trim();
+      if (!sid) return;
+      const sub = (r.subscriptionStatus ?? "").trim();
+      if (sub === "マーケのみ" || sub.includes("解約")) {
+        cancelled.add(sid);
+      }
+    });
+  });
+  return cancelled;
+}
+
 // 新システム移行の画面用に「最新のクライアント一覧」を取得。
 // 移行作業は月を跨いだ運用なので、月ごとに違う一覧が出ると使いづらい。
 // currentBillingMonth から順に遡って最初にクライアント行がある月のシートを使う。
