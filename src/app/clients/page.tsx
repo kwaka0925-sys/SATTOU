@@ -26,6 +26,7 @@ export default async function ClientsPage({
       sheetName={result.sheetName}
       expectedSheets={result.expectedSheets}
       sheetMatched={result.sheetMatched}
+      failed={result.failed ?? false}
     />
   );
 }

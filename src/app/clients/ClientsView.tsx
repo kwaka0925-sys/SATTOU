@@ -87,6 +87,8 @@ type Props = {
   sheetName?: string;
   expectedSheets?: string[];
   sheetMatched?: boolean;
+  // 直近の GAS 呼び出しがタイムアウト等で失敗した場合 true。
+  failed?: boolean;
 };
 
 function monthLabel(month: string): string {
@@ -109,12 +111,14 @@ export default function ClientsView({
   sheetName,
   expectedSheets,
   sheetMatched,
+  failed,
 }: Props) {
   const [q, setQ] = useState("");
   const [pm, setPm] = useState<PmFilter>("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
   const [overrides, setOverrides] = useState<OverridesMap>({});
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     try {
@@ -538,7 +542,30 @@ export default function ClientsView({
             を Vercel の環境変数に登録すると、請求書シートの実データがこの画面に反映されます。
           </div>
         )}
-        {configured && rows.length === 0 && (
+        {configured && failed && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-900 text-xs px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                シートからのデータ取得に失敗しました (タイムアウトまたは通信エラー)。もう一度お試しください。
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setReloading(true);
+                router.refresh();
+                setTimeout(() => setReloading(false), 3000);
+              }}
+              disabled={reloading}
+              className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${reloading ? "animate-spin" : ""}`} />
+              再読み込み
+            </button>
+          </div>
+        )}
+        {configured && !failed && rows.length === 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
             {monthLabel(month)}分のデータがシートに見つかりませんでした。
             <code className="font-mono">?month=YYYY-MM</code> で別の月を指定できます。

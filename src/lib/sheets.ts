@@ -25,6 +25,9 @@ export type SheetRow = {
 
 export type DashboardTotals = {
   configured: boolean;
+  // GAS 呼び出しがタイムアウト/エラーで空データを返した場合に true。
+  // 「実データが 0」と「取得失敗で空」を UI 側で区別するために使う。
+  failed?: boolean;
   month: string;
   sheetName?: string;
   revenue: number;
@@ -221,6 +224,47 @@ function isConfigured(): boolean {
   return isBackendConfigured("stores");
 }
 
+// GAS へのリクエストを AbortController でタイムアウト付きラップする。
+// タイムアウトなし fetch だと GAS が遅延した際に Vercel の 10 秒制限まで
+// 待たされ、その間ページには何も表示されずフリーズに見える。
+// 6 秒でアボートすれば、UI 側にエラーを伝えて再読み込みボタンを出せる。
+//
+// リトライ方針:
+//   - 5xx: 一過性の可能性が高いので 1 回だけリトライ
+//   - ネットワーク切断: 同上
+//   - タイムアウト (AbortError): 再試行しても同様にハングする可能性が高いので即失敗
+//   - 4xx: リトライしても意味がないのでそのまま返す
+async function fetchGas(
+  url: string,
+  init: RequestInit & { next?: { revalidate?: number; tags?: string[] } },
+  timeoutMs: number = 6000,
+): Promise<Response | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) return res;
+      if (res.status >= 500 && attempt === 0) continue;
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      const isAbort =
+        err instanceof Error &&
+        (err.name === "AbortError" || err.name === "TimeoutError");
+      if (isAbort) {
+        console.warn(`[sheets] fetch timeout after ${timeoutMs}ms: ${url}`);
+        return null;
+      }
+      if (attempt === 0) continue;
+      console.warn("[sheets] fetch failed after retry", err);
+      return null;
+    }
+  }
+  return null;
+}
+
 // 新システム移行タブの 1 レコード。subscriberId を主キーに sattou 全ユーザー共有。
 export type MigrationStatusRecord = {
   clientName: string;
@@ -303,14 +347,14 @@ export async function fetchMigrationStatuses(): Promise<
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("action", "migrations");
 
+  // 他ユーザーの更新を確実に取り込むため、キャッシュはタグ経由で無効化。
+  // 更新 API 側で revalidateTag("migrations-sheet") を呼ぶことで
+  // 次回リクエストは必ず GAS を叩き直す。
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 30, tags: ["migrations-sheet"] },
+  });
+  if (!res || !res.ok) return {};
   try {
-    const res = await fetch(url.toString(), {
-      // 他ユーザーの更新を確実に取り込むため、キャッシュはタグ経由で無効化。
-      // 更新 API 側で revalidateTag("migrations-sheet") を呼ぶことで
-      // 次回リクエストは必ず GAS を叩き直す。
-      next: { revalidate: 30, tags: ["migrations-sheet"] },
-    });
-    if (!res.ok) return {};
     const data = (await res.json()) as {
       migrations?: Record<string, MigrationStatusRecord>;
       error?: string;
@@ -318,7 +362,7 @@ export async function fetchMigrationStatuses(): Promise<
     if (data.error) return {};
     return data.migrations ?? {};
   } catch (err) {
-    console.warn("[sheets] migrations fetch failed", err);
+    console.warn("[sheets] migrations json parse failed", err);
     return {};
   }
 }
@@ -347,11 +391,11 @@ export async function fetchManualCancellations(): Promise<
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("action", "manualCancellations");
 
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 30, tags: ["cancellations-manual"] },
+  });
+  if (!res || !res.ok) return [];
   try {
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 30, tags: ["cancellations-manual"] },
-    });
-    if (!res.ok) return [];
     const data = (await res.json()) as {
       cancellations?: ManualCancellation[];
       error?: string;
@@ -359,7 +403,7 @@ export async function fetchManualCancellations(): Promise<
     if (data.error) return [];
     return data.cancellations ?? [];
   } catch (err) {
-    console.warn("[sheets] manual cancellations fetch failed", err);
+    console.warn("[sheets] manual cancellations json parse failed", err);
     return [];
   }
 }
@@ -369,6 +413,8 @@ export type InvoicesFetchResult = {
   sheetName?: string;
   expectedSheets: string[];
   sheetMatched: boolean;
+  // GAS 呼び出しがタイムアウト/エラーで空データを返した場合に true。
+  failed?: boolean;
 };
 
 // 内部関数: sheet 名とマッチ判定も返すバージョン。診断表示に使う。
@@ -388,21 +434,25 @@ export async function fetchInvoicesFromSheetWithMeta(
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
+  // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
+  // 双方向同期の鮮度は次の 3 経路で確保している:
+  //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
+  //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
+  //   3. 「シート更新」ボタン       → 同上
+  // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
+  // 何か変化があった直後は必ず最新を取り直す構成になっている。
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 60, tags: ["invoices-sheet"] },
+  });
+  if (!res) {
+    // タイムアウトまたはリトライ後もネットワーク失敗。UI に伝える。
+    return { ...empty, failed: true };
+  }
+  if (!res.ok) {
+    console.warn(`[sheets] GAS responded ${res.status}`);
+    return { ...empty, failed: true };
+  }
   try {
-    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
-    // 双方向同期の鮮度は次の 3 経路で確保している:
-    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
-    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
-    //   3. 「シート更新」ボタン       → 同上
-    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
-    // 何か変化があった直後は必ず最新を取り直す構成になっている。
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 60, tags: ["invoices-sheet"] },
-    });
-    if (!res.ok) {
-      console.warn(`[sheets] GAS responded ${res.status}`);
-      return empty;
-    }
     const data = (await res.json()) as {
       rows?: SheetRow[];
       sheet?: string;
@@ -410,7 +460,7 @@ export async function fetchInvoicesFromSheetWithMeta(
     };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
-      return empty;
+      return { ...empty, failed: true };
     }
     const sheetName = data.sheet;
     const sheetMatched = !!sheetName && expectedSheets.includes(sheetName);
@@ -430,8 +480,8 @@ export async function fetchInvoicesFromSheetWithMeta(
       });
     return { rows: invoices, sheetName, expectedSheets, sheetMatched };
   } catch (err) {
-    console.warn("[sheets] fetch failed", err);
-    return empty;
+    console.warn("[sheets] json parse failed", err);
+    return { ...empty, failed: true };
   }
 }
 
@@ -472,18 +522,11 @@ export async function fetchInvoicesForMonthStrict(
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 60, tags: ["invoices-sheet"] },
+  });
+  if (!res || !res.ok) return [];
   try {
-    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
-    // 双方向同期の鮮度は次の 3 経路で確保している:
-    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
-    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
-    //   3. 「シート更新」ボタン       → 同上
-    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
-    // 何か変化があった直後は必ず最新を取り直す構成になっている。
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 60, tags: ["invoices-sheet"] },
-    });
-    if (!res.ok) return [];
     const data = (await res.json()) as {
       rows?: SheetRow[];
       sheet?: string;
@@ -496,7 +539,7 @@ export async function fetchInvoicesForMonthStrict(
       .filter((r) => r.salonName && r.salonName.trim())
       .map((r) => rowToInvoice(r, month));
   } catch (err) {
-    console.warn("[sheets] strict fetch failed", err);
+    console.warn("[sheets] strict json parse failed", err);
     return [];
   }
 }
@@ -526,21 +569,17 @@ export async function fetchDashboardTotals(
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 60, tags: ["invoices-sheet"] },
+  });
+  if (!res) {
+    return { ...empty, configured: true, failed: true };
+  }
+  if (!res.ok) {
+    console.warn(`[sheets] GAS responded ${res.status}`);
+    return { ...empty, configured: true, failed: true };
+  }
   try {
-    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
-    // 双方向同期の鮮度は次の 3 経路で確保している:
-    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
-    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
-    //   3. 「シート更新」ボタン       → 同上
-    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
-    // 何か変化があった直後は必ず最新を取り直す構成になっている。
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 60, tags: ["invoices-sheet"] },
-    });
-    if (!res.ok) {
-      console.warn(`[sheets] GAS responded ${res.status}`);
-      return { ...empty, configured: true };
-    }
     const data = (await res.json()) as {
       rows?: SheetRow[];
       sheet?: string;
@@ -548,7 +587,7 @@ export async function fetchDashboardTotals(
     };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
-      return { ...empty, configured: true };
+      return { ...empty, configured: true, failed: true };
     }
     const rows = (data.rows ?? []).filter(
       (r) => r.salonName && r.salonName.trim(),
@@ -593,8 +632,8 @@ export async function fetchDashboardTotals(
       }, 0),
     };
   } catch (err) {
-    console.warn("[sheets] fetch failed", err);
-    return { ...empty, configured: true };
+    console.warn("[sheets] dashboard json parse failed", err);
+    return { ...empty, configured: true, failed: true };
   }
 }
 
@@ -688,6 +727,8 @@ export type StoreSheetResult = {
   configured: boolean;
   sheetName?: string;
   rows: StoreSheetRow[];
+  // GAS 呼び出しがタイムアウト/エラーで空データを返した場合に true。
+  failed?: boolean;
 };
 
 // Reinterpret the sheet columns for the "sattou導入店舗" view:
@@ -707,21 +748,17 @@ export async function fetchStoresFromSheet(
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
+  const res = await fetchGas(url.toString(), {
+    next: { revalidate: 60, tags: ["invoices-sheet"] },
+  });
+  if (!res) {
+    return { configured: true, rows: [], failed: true };
+  }
+  if (!res.ok) {
+    console.warn(`[sheets] GAS responded ${res.status}`);
+    return { configured: true, rows: [], failed: true };
+  }
   try {
-    // ページ遷移 (/clients ↔ /ads など) を速くするために 60 秒キャッシュ。
-    // 双方向同期の鮮度は次の 3 経路で確保している:
-    //   1. sattou 側の書き戻し成功時 → /api/invoices/update が revalidateTag
-    //   2. タブフォーカス復帰時       → クライアントが /api/invoices/revalidate を叩いてから refresh
-    //   3. 「シート更新」ボタン       → 同上
-    // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
-    // 何か変化があった直後は必ず最新を取り直す構成になっている。
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 60, tags: ["invoices-sheet"] },
-    });
-    if (!res.ok) {
-      console.warn(`[sheets] GAS responded ${res.status}`);
-      return { configured: true, rows: [] };
-    }
     const data = (await res.json()) as {
       rows?: SheetRow[];
       sheet?: string;
@@ -729,7 +766,7 @@ export async function fetchStoresFromSheet(
     };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
-      return { configured: true, sheetName: data.sheet, rows: [] };
+      return { configured: true, sheetName: data.sheet, rows: [], failed: true };
     }
     const rows = (data.rows ?? []).filter(
       (r) => (r.subscriberId ?? "").trim() || (r.salonName ?? "").trim(),
@@ -767,8 +804,8 @@ export async function fetchStoresFromSheet(
       rows: stores,
     };
   } catch (err) {
-    console.warn("[sheets] fetch failed", err);
-    return { configured: true, rows: [] };
+    console.warn("[sheets] stores json parse failed", err);
+    return { configured: true, rows: [], failed: true };
   }
 }
 

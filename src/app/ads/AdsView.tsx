@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { yen, pct } from "@/lib/format";
 import TopBar from "@/components/TopBar";
@@ -34,6 +35,8 @@ type Props = {
   sheetName?: string;
   expectedSheets?: string[];
   sheetMatched?: boolean;
+  // 直近の GAS 呼び出しがタイムアウト等で失敗した場合 true。
+  failed?: boolean;
 };
 
 function monthLabel(month: string): string {
@@ -160,9 +163,12 @@ export default function AdsView({
   sheetName,
   expectedSheets,
   sheetMatched,
+  failed,
 }: Props) {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [marketer, setMarketer] = useState<string>("all");
+  const [reloadingSheet, setReloadingSheet] = useState(false);
   // 同期期間は「表示月の稼働月」に固定 (例: 8月請求 → 7/1〜7/31)。
   // 別月分まで書き戻して事故らないように、UI から編集不可にする。
   const { since, until } = useMemo(() => operatingMonthRange(month), [month]);
@@ -429,7 +435,30 @@ export default function AdsView({
             を Vercel の環境変数に登録すると、シート列R〜V（広告費・下限額・運用代行税抜/税込）が反映されます。
           </div>
         )}
-        {configured && rows.length === 0 && (
+        {configured && failed && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-900 text-xs px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                シートからのデータ取得に失敗しました (タイムアウトまたは通信エラー)。もう一度お試しください。
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setReloadingSheet(true);
+                router.refresh();
+                setTimeout(() => setReloadingSheet(false), 3000);
+              }}
+              disabled={reloadingSheet}
+              className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${reloadingSheet ? "animate-spin" : ""}`} />
+              再読み込み
+            </button>
+          </div>
+        )}
+        {configured && !failed && rows.length === 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-2">
             {monthLabel(month)}分のデータがシートに見つかりませんでした。
           </div>

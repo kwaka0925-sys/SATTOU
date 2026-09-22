@@ -24,6 +24,7 @@ export default async function StoresPage({
       configured={result.configured}
       sheetName={result.sheetName}
       month={month}
+      failed={result.failed ?? false}
     />
   );
 }

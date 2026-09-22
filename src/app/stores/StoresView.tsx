@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { num } from "@/lib/format";
 import TopBar from "@/components/TopBar";
-import { Check, ExternalLink, Filter, Search } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, Filter, RefreshCw, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { StoreRow } from "./page";
 
 type CancelFilter = "all" | "継続" | "解約";
@@ -15,6 +16,9 @@ type Props = {
   configured: boolean;
   sheetName?: string;
   month: string;
+  // 直近の GAS 呼び出しがタイムアウト等で失敗した場合 true。空データを
+  // 「実際に 0 件」と「取得失敗で空」で区別するために使う。
+  failed?: boolean;
 };
 
 function monthLabel(month: string): string {
@@ -28,12 +32,14 @@ function rowKey(r: StoreRow): string {
   return r.identifier || r.clientName || String(r.order);
 }
 
-export default function StoresView({ rows, configured, sheetName, month }: Props) {
+export default function StoresView({ rows, configured, sheetName, month, failed }: Props) {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [cancel, setCancel] = useState<CancelFilter>("all");
   const [legacy, setLegacy] = useState<LegacyFilter>("all");
   const [marketer, setMarketer] = useState<string>("all");
   const [cancelledSet, setCancelledSet] = useState<Set<string>>(new Set());
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     try {
@@ -114,7 +120,30 @@ export default function StoresView({ rows, configured, sheetName, month }: Props
             を Vercel の環境変数に登録すると、導入店舗シートの実データが反映されます。
           </div>
         )}
-        {configured && rows.length === 0 && (
+        {configured && failed && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-900 text-xs px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                シートからのデータ取得に失敗しました (タイムアウトまたは通信エラー)。もう一度お試しください。
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setReloading(true);
+                router.refresh();
+                setTimeout(() => setReloading(false), 3000);
+              }}
+              disabled={reloading}
+              className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${reloading ? "animate-spin" : ""}`} />
+              再読み込み
+            </button>
+          </div>
+        )}
+        {configured && !failed && rows.length === 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs px-4 py-3">
             {monthLabel(month)}分のデータがシートに見つかりませんでした。<code className="font-mono">?month=YYYY-MM</code> で別の月を指定できます。
           </div>
