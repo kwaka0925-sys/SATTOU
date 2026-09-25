@@ -227,42 +227,95 @@ function isConfigured(): boolean {
 // GAS へのリクエストを AbortController でタイムアウト付きラップする。
 // タイムアウトなし fetch だと GAS が遅延した際に Vercel の 10 秒制限まで
 // 待たされ、その間ページには何も表示されずフリーズに見える。
-// 6 秒でアボートすれば、UI 側にエラーを伝えて再読み込みボタンを出せる。
+// 8 秒でアボートすれば、UI 側にエラーを伝えて再読み込みボタンを出せる。
+// (Vercel Hobby の関数上限 10s に対して 2s の余裕を持たせる)
 //
 // リトライ方針:
-//   - 5xx: 一過性の可能性が高いので 1 回だけリトライ
+//   - 5xx: 1 回だけ短時間 (2s) リトライ (通常は即エラーで戻ってくるため無害)
 //   - ネットワーク切断: 同上
-//   - タイムアウト (AbortError): 再試行しても同様にハングする可能性が高いので即失敗
+//   - タイムアウト (AbortError): 再試行しても Vercel 上限を超える危険があるため即失敗
 //   - 4xx: リトライしても意味がないのでそのまま返す
 async function fetchGas(
   url: string,
   init: RequestInit & { next?: { revalidate?: number; tags?: string[] } },
-  timeoutMs: number = 6000,
+  timeoutMs: number = 8000,
 ): Promise<Response | null> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) return res;
-      if (res.status >= 500 && attempt === 0) continue;
-      return res;
-    } catch (err) {
-      clearTimeout(timer);
-      const isAbort =
-        err instanceof Error &&
-        (err.name === "AbortError" || err.name === "TimeoutError");
-      if (isAbort) {
-        console.warn(`[sheets] fetch timeout after ${timeoutMs}ms: ${url}`);
-        return null;
-      }
-      if (attempt === 0) continue;
-      console.warn("[sheets] fetch failed after retry", err);
+  // 1 回目: 通常タイムアウト
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) return res;
+    // 5xx: 短時間だけリトライ (通常は即失敗なので Vercel 上限は超えない)
+    if (res.status >= 500) {
+      return retryOnce(url, init, 2000) ?? res;
+    }
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    const isAbort =
+      err instanceof Error &&
+      (err.name === "AbortError" || err.name === "TimeoutError");
+    if (isAbort) {
+      // タイムアウトなら残り時間が少ないためリトライしない。
+      const host = safeHost(url);
+      console.warn(`[sheets] fetch timeout after ${timeoutMs}ms host=${host}`);
       return null;
     }
+    // ネットワーク切断はリトライ 1 回
+    const retried = await retryOnce(url, init, 2000);
+    if (retried) return retried;
+    console.warn("[sheets] fetch failed after retry", err);
+    return null;
   }
-  return null;
+}
+
+async function retryOnce(
+  url: string,
+  init: RequestInit & { next?: { revalidate?: number; tags?: string[] } },
+  timeoutMs: number,
+): Promise<Response | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    clearTimeout(timer);
+    return res.ok ? res : null;
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// URL からホスト部分だけ抜き出す (ログ用)。トークン等が漏れないようにする。
+function safeHost(u: string): string {
+  try {
+    return new URL(u).host;
+  } catch {
+    return "unknown";
+  }
+}
+
+// 最終手段のフォールバック用: 最後に成功したフェッチ結果をモジュール変数に
+// 保持しておく。GAS がタイムアウトした際、真っ白ではなく直近のデータを
+// 表示する (最大 30 分)。Vercel サーバレスコンテナが暖まっている間だけ有効。
+const STALE_CACHE_TTL_MS = 30 * 60 * 1000;
+type StaleEntry<T> = { at: number; value: T };
+const staleCache = new Map<string, StaleEntry<unknown>>();
+
+function readStale<T>(key: string): T | null {
+  const entry = staleCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > STALE_CACHE_TTL_MS) {
+    staleCache.delete(key);
+    return null;
+  }
+  return entry.value as T;
+}
+
+function writeStale<T>(key: string, value: T): void {
+  staleCache.set(key, { at: Date.now(), value });
 }
 
 // 新システム移行タブの 1 レコード。subscriberId を主キーに sattou 全ユーザー共有。
@@ -441,15 +494,21 @@ export async function fetchInvoicesFromSheetWithMeta(
   //   3. 「シート更新」ボタン       → 同上
   // これにより、無編集の単純なページ切り替えはキャッシュヒットで瞬時、
   // 何か変化があった直後は必ず最新を取り直す構成になっている。
+  const staleKey = `invoices:${month}`;
   const res = await fetchGas(url.toString(), {
     next: { revalidate: 60, tags: ["invoices-sheet"] },
   });
   if (!res) {
-    // タイムアウトまたはリトライ後もネットワーク失敗。UI に伝える。
+    // タイムアウトまたはリトライ後もネットワーク失敗。直近成功データがあれば
+    // それを表示し、UI 側でシルバー枠のバナーを出す。
+    const stale = readStale<InvoicesFetchResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { ...empty, failed: true };
   }
   if (!res.ok) {
     console.warn(`[sheets] GAS responded ${res.status}`);
+    const stale = readStale<InvoicesFetchResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { ...empty, failed: true };
   }
   try {
@@ -460,6 +519,8 @@ export async function fetchInvoicesFromSheetWithMeta(
     };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
+      const stale = readStale<InvoicesFetchResult>(staleKey);
+      if (stale) return { ...stale, failed: true };
       return { ...empty, failed: true };
     }
     const sheetName = data.sheet;
@@ -478,9 +539,18 @@ export async function fetchInvoicesFromSheetWithMeta(
         if (bFin) return 1;
         return (a.subscriberId ?? "").localeCompare(b.subscriberId ?? "");
       });
-    return { rows: invoices, sheetName, expectedSheets, sheetMatched };
+    const result: InvoicesFetchResult = {
+      rows: invoices,
+      sheetName,
+      expectedSheets,
+      sheetMatched,
+    };
+    writeStale(staleKey, result);
+    return result;
   } catch (err) {
     console.warn("[sheets] json parse failed", err);
+    const stale = readStale<InvoicesFetchResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { ...empty, failed: true };
   }
 }
@@ -748,14 +818,19 @@ export async function fetchStoresFromSheet(
   url.searchParams.set("token", cfg.token);
   url.searchParams.set("month", month);
 
+  const staleKey = `stores:${month}`;
   const res = await fetchGas(url.toString(), {
     next: { revalidate: 60, tags: ["invoices-sheet"] },
   });
   if (!res) {
+    const stale = readStale<StoreSheetResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { configured: true, rows: [], failed: true };
   }
   if (!res.ok) {
     console.warn(`[sheets] GAS responded ${res.status}`);
+    const stale = readStale<StoreSheetResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { configured: true, rows: [], failed: true };
   }
   try {
@@ -766,6 +841,8 @@ export async function fetchStoresFromSheet(
     };
     if (data.error) {
       console.warn(`[sheets] GAS error: ${data.error}`);
+      const stale = readStale<StoreSheetResult>(staleKey);
+      if (stale) return { ...stale, failed: true };
       return { configured: true, sheetName: data.sheet, rows: [], failed: true };
     }
     const rows = (data.rows ?? []).filter(
@@ -798,13 +875,17 @@ export async function fetchStoresFromSheet(
         initialSheetUrl: (r.otherAdSpendUrl ?? "").trim(),
       };
     });
-    return {
+    const result: StoreSheetResult = {
       configured: true,
       sheetName: data.sheet,
       rows: stores,
     };
+    writeStale(staleKey, result);
+    return result;
   } catch (err) {
     console.warn("[sheets] stores json parse failed", err);
+    const stale = readStale<StoreSheetResult>(staleKey);
+    if (stale) return { ...stale, failed: true };
     return { configured: true, rows: [], failed: true };
   }
 }

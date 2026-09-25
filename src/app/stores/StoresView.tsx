@@ -40,6 +40,22 @@ export default function StoresView({ rows, configured, sheetName, month, failed 
   const [marketer, setMarketer] = useState<string>("all");
   const [cancelledSet, setCancelledSet] = useState<Set<string>>(new Set());
   const [reloading, setReloading] = useState(false);
+  // 失敗時に何回まで自動リトライしたか。手動ボタンでリロードすると 0 に戻る。
+  const [autoRetryCount, setAutoRetryCount] = useState(0);
+
+  // 取得失敗 (failed=true) の際、ユーザー操作を待たずに 2 秒後に一度だけ
+  // router.refresh() を呼ぶ。GAS の遅延や瞬断で失敗した場合、多くは
+  // 数秒待てば復旧するので、体感的な「たまに読み込まない」問題を吸収する。
+  useEffect(() => {
+    if (!failed || autoRetryCount >= 1) return;
+    const t = setTimeout(() => {
+      setReloading(true);
+      setAutoRetryCount((n) => n + 1);
+      router.refresh();
+      setTimeout(() => setReloading(false), 3000);
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [failed, autoRetryCount, router]);
 
   useEffect(() => {
     try {
@@ -125,13 +141,18 @@ export default function StoresView({ rows, configured, sheetName, month, failed 
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>
-                シートからのデータ取得に失敗しました (タイムアウトまたは通信エラー)。もう一度お試しください。
+                {reloading
+                  ? "自動的に再取得しています..."
+                  : autoRetryCount === 0
+                  ? "シートからのデータ取得に失敗しました。まもなく自動的に再取得します。"
+                  : "自動再取得も失敗しました。もう一度お試しください。"}
               </span>
             </div>
             <button
               type="button"
               onClick={() => {
                 setReloading(true);
+                setAutoRetryCount(0);
                 router.refresh();
                 setTimeout(() => setReloading(false), 3000);
               }}
