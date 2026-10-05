@@ -42,6 +42,7 @@ export type Invoice = {
 export type Client = {
   id: string;
   name: string;
+  brand: string;
   representative: string;
   industry: Industry;
   prefecture: string;
