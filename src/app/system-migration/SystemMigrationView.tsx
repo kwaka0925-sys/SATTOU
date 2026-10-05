@@ -46,6 +46,30 @@ type Props = {
 
 type StatusFilter = "all" | "completed" | "blank";
 
+// 列ごとのフィルタ値。空文字 / "all" は「絞り込みなし」。
+// 日付列は 3 択セレクトで「入力あり / 未入力」を切り替える。
+type ColumnFilters = {
+  clientName: string;
+  brandCount: string;
+  storeCount: string;
+  subscriberId: string;
+  completed: "all" | "completed" | "blank";
+  migrationDate: "all" | "has" | "empty";
+  plannedDate: "all" | "has" | "empty";
+  note: string;
+};
+
+const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
+  clientName: "",
+  brandCount: "",
+  storeCount: "",
+  subscriberId: "",
+  completed: "all",
+  migrationDate: "all",
+  plannedDate: "all",
+  note: "",
+};
+
 // 並び替え対象と方向。null は元順 (シート順)。
 type SortKey = "migrationDate" | "plannedDate";
 type SortDir = "asc" | "desc";
@@ -135,6 +159,19 @@ export default function SystemMigrationView({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [syncBadge, setSyncBadge] = useState<SyncBadge>({ kind: "idle" });
   const [refreshing, setRefreshing] = useState(false);
+  // 列ヘッダー配下に出る絞り込み入力。トップの検索欄とは AND で効く。
+  const [colFilters, setColFilters] = useState<ColumnFilters>(
+    DEFAULT_COLUMN_FILTERS,
+  );
+  const anyColFilterActive =
+    colFilters.clientName.trim() !== "" ||
+    colFilters.brandCount.trim() !== "" ||
+    colFilters.storeCount.trim() !== "" ||
+    colFilters.subscriberId.trim() !== "" ||
+    colFilters.completed !== "all" ||
+    colFilters.migrationDate !== "all" ||
+    colFilters.plannedDate !== "all" ||
+    colFilters.note.trim() !== "";
 
   // メモ入力のデバウンス。subscriberId ごとに 500ms 遅延で書き込みたいので、
   // タイマー ID を id ごとに保持しておく。
@@ -300,9 +337,15 @@ export default function SystemMigrationView({
   );
 
   const filtered = useMemo(() => {
+    const nameQ = colFilters.clientName.trim().toLowerCase();
+    const brandQ = colFilters.brandCount.trim();
+    const storeQ = colFilters.storeCount.trim();
+    const sidQ = colFilters.subscriberId.trim().toLowerCase();
+    const noteQ = colFilters.note.trim().toLowerCase();
     return rows.filter((r) => {
       const sid = (r.subscriberId ?? "").trim();
       const status = getStatus(migrations, sid);
+      // トップ側の既存フィルタ
       if (statusFilter === "completed" && !status.completed) return false;
       if (statusFilter === "blank" && status.completed) return false;
       if (q) {
@@ -310,9 +353,25 @@ export default function SystemMigrationView({
         const hay = `${r.clientName} ${r.subscriberId ?? ""}`.toLowerCase();
         if (!hay.includes(qq)) return false;
       }
+      // 列ごとのフィルタ (すべて AND)
+      if (nameQ && !r.clientName.toLowerCase().includes(nameQ)) return false;
+      if (brandQ && String(r.brandCount ?? "") !== brandQ) return false;
+      if (storeQ && String(r.storeCount ?? "") !== storeQ) return false;
+      if (sidQ && !sid.toLowerCase().includes(sidQ)) return false;
+      if (colFilters.completed === "completed" && !status.completed)
+        return false;
+      if (colFilters.completed === "blank" && status.completed) return false;
+      if (colFilters.migrationDate === "has" && !status.migrationDate)
+        return false;
+      if (colFilters.migrationDate === "empty" && status.migrationDate)
+        return false;
+      if (colFilters.plannedDate === "has" && !status.plannedDate) return false;
+      if (colFilters.plannedDate === "empty" && status.plannedDate)
+        return false;
+      if (noteQ && !status.note.toLowerCase().includes(noteQ)) return false;
       return true;
     });
-  }, [rows, migrations, statusFilter, q]);
+  }, [rows, migrations, statusFilter, q, colFilters]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortKey) return filtered;
@@ -549,6 +608,145 @@ export default function SystemMigrationView({
                   </th>
                   <th className="text-left font-medium px-4 py-3 min-w-[320px]">
                     メモ
+                  </th>
+                </tr>
+                {/* 列ごとのフィルタ行。各セルで条件を入力すると AND で絞り込まれる。 */}
+                <tr className="border-t border-slate-200 bg-white normal-case tracking-normal">
+                  <th className="px-2 py-2 sticky left-0 bg-white z-30">
+                    <input
+                      type="text"
+                      value={colFilters.clientName}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          clientName: e.target.value,
+                        }))
+                      }
+                      placeholder="名前で絞込"
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </th>
+                  <th className="px-2 py-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={colFilters.brandCount}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          brandCount: e.target.value,
+                        }))
+                      }
+                      placeholder="数"
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 text-center font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </th>
+                  <th className="px-2 py-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={colFilters.storeCount}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          storeCount: e.target.value,
+                        }))
+                      }
+                      placeholder="数"
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 text-center font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </th>
+                  <th className="px-2 py-2">
+                    <input
+                      type="text"
+                      value={colFilters.subscriberId}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          subscriberId: e.target.value,
+                        }))
+                      }
+                      placeholder="識別番号"
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 text-center font-mono font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </th>
+                  <th className="px-2 py-2">
+                    <select
+                      value={colFilters.completed}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          completed: e.target.value as ColumnFilters["completed"],
+                        }))
+                      }
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    >
+                      <option value="all">すべて</option>
+                      <option value="completed">完了</option>
+                      <option value="blank">未実施</option>
+                    </select>
+                  </th>
+                  <th className="px-2 py-2">
+                    <select
+                      value={colFilters.migrationDate}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          migrationDate: e.target
+                            .value as ColumnFilters["migrationDate"],
+                        }))
+                      }
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    >
+                      <option value="all">すべて</option>
+                      <option value="has">入力あり</option>
+                      <option value="empty">未入力</option>
+                    </select>
+                  </th>
+                  <th className="px-2 py-2">
+                    <select
+                      value={colFilters.plannedDate}
+                      onChange={(e) =>
+                        setColFilters((p) => ({
+                          ...p,
+                          plannedDate: e.target
+                            .value as ColumnFilters["plannedDate"],
+                        }))
+                      }
+                      className="w-full text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    >
+                      <option value="all">すべて</option>
+                      <option value="has">入力あり</option>
+                      <option value="empty">未入力</option>
+                    </select>
+                  </th>
+                  <th className="px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={colFilters.note}
+                        onChange={(e) =>
+                          setColFilters((p) => ({
+                            ...p,
+                            note: e.target.value,
+                          }))
+                        }
+                        placeholder="メモで絞込"
+                        className="flex-1 text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                      />
+                      {anyColFilterActive && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setColFilters(DEFAULT_COLUMN_FILTERS)
+                          }
+                          className="shrink-0 text-[11px] rounded border border-slate-200 bg-white px-2 py-1 font-normal text-slate-600 hover:bg-slate-100"
+                          title="列フィルタをクリア"
+                        >
+                          クリア
+                        </button>
+                      )}
+                    </div>
                   </th>
                 </tr>
               </thead>
